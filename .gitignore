@@ -1,0 +1,11 @@
+node_modules
+client/node_modules
+dist
+client/dist
+.env
+.DS_Store
+.wwebjs_auth
+.wwebjs_cache
+coverage
+logs
+*.log
