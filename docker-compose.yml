@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - MONGO_URI=mongodb+srv://ramazan:ramazan123@cluster0.mongodb.net/ramazan-app
+      - NODE_ENV=production
+    volumes:
+      - ./.wwebjs_auth:/app/.wwebjs_auth
+      - ./logs:/app/logs
+  # Note: Since we use MongoDB Atlas (Cloud), we don't strictly need a local mongo container.
+  # But if you wanted local DB, it would go here.

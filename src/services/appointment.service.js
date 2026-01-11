@@ -1,0 +1,155 @@
+const Appointment = require('../models/appointment.model');
+const logger = require('../config/logger');
+
+// Constants for business hours
+const Settings = require('../models/settings.model');
+
+// Generate all possible slots for a day
+const generateAllSlots = async () => {
+    let settings = await Settings.findOne();
+    if (!settings) settings = { appointmentStartHour: 8, appointmentEndHour: 20 };
+
+    const slots = [];
+    for (let i = settings.appointmentStartHour; i < settings.appointmentEndHour; i++) {
+        const hourString = `${i.toString().padStart(2, '0')}:00`;
+        slots.push(hourString);
+    }
+    return slots;
+};
+
+/**
+ * Get available slots for a given date
+ * @param {string} date - YYYY-MM-DD
+ * @returns {Promise<string[]>}
+ */
+const getAvailableSlots = async (date) => {
+    const allSlots = await generateAllSlots();
+
+    const bookedAppointments = await Appointment.find({
+        date: date,
+        status: 'confirmed'
+    }).select('hour');
+
+    const bookedHours = bookedAppointments.map(app => app.hour);
+    const availableSlots = allSlots.filter(slot => !bookedHours.includes(slot));
+
+    return availableSlots;
+};
+
+/**
+ * Create a new appointment
+ * @param {Object} data - { customerName, phone, date, hour, service, createdFrom }
+ * @returns {Promise<Object>}
+ */
+const createAppointment = async (data) => {
+    const appointmentDateTime = new Date(`${data.date}T${data.hour}`);
+    if (appointmentDateTime < new Date()) {
+        throw new Error('Geçmiş zamana randevu alınamaz.');
+    }
+
+    // EXPLICIT CHECK: Prevent double booking regardless of DB Index
+    const existing = await Appointment.findOne({
+        date: data.date,
+        hour: data.hour,
+        status: 'confirmed'
+    });
+
+    if (existing) {
+        logger.warn(`Double Booking Attempt Blocked: ${data.date} ${data.hour}`);
+        throw new Error('Bu saat maalesef az önce doldu. Lütfen başka bir saat seçin.');
+    }
+
+    try {
+        const appointment = new Appointment({
+            customerName: data.customerName,
+            phone: data.phone,
+            date: data.date,
+            hour: data.hour,
+            service: data.service || 'sac',
+            createdFrom: data.createdFrom,
+            status: 'confirmed'
+        });
+
+        const savedAppointment = await appointment.save();
+        logger.info(`Appointment created: ${savedAppointment._id} for ${data.phone}`);
+        return savedAppointment;
+
+    } catch (error) {
+        if (error.code === 11000) {
+            logger.warn(`Race condition caught: Slot ${data.date} ${data.hour} is already taken.`);
+            throw new Error('Bu saat maalesef dolu. Lütfen başka bir saat seçin.');
+        }
+        throw error;
+    }
+};
+
+/**
+ * Get active appointment for a phone number
+ * @param {string} phone 
+ */
+const getMyAppointment = async (phone) => {
+    const today = new Date().toISOString().split('T')[0];
+
+    const appointment = await Appointment.findOne({
+        phone: phone,
+        status: 'confirmed',
+        date: { $gte: today }
+    }).sort({ date: 1, hour: 1 });
+
+    return appointment;
+};
+
+/**
+ * Cancel an appointment
+ * @param {string} id 
+ */
+const cancelAppointment = async (id) => {
+    const appointment = await Appointment.findById(id);
+    if (!appointment) {
+        throw new Error('Randevu bulunamadı.');
+    }
+
+    appointment.status = 'cancelled';
+    await appointment.save();
+    logger.info(`Appointment cancelled: ${id}`);
+    return appointment;
+};
+
+/**
+ * Get customer appointment history
+ * @param {string} phone 
+ */
+const getCustomerHistory = async (phone) => {
+    const appointments = await Appointment.find({
+        phone: phone
+    }).sort({ date: -1, hour: -1 }).limit(10);
+
+    return appointments;
+};
+
+const deleteAppointment = async (id) => {
+    const result = await Appointment.findByIdAndDelete(id);
+    if (!result) {
+        throw new Error('Randevu bulunamadı veya zaten silinmiş.');
+    }
+    logger.info(`Appointment deleted permanently: ${id}`);
+    return result;
+};
+
+const getDailyAppointments = async (date) => {
+    const appointments = await Appointment.find({
+        date: date,
+        status: 'confirmed'
+    }).sort({ hour: 1 });
+    return appointments;
+};
+
+module.exports = {
+    getAvailableSlots,
+    createAppointment,
+    getMyAppointment,
+    cancelAppointment,
+    deleteAppointment,
+    getCustomerHistory,
+    getDailyAppointments
+};
