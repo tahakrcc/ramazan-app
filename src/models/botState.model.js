@@ -11,13 +11,12 @@ const botStateSchema = new mongoose.Schema({
     },
     state: {
         type: String,
-        enum: ['IDLE', 'SELECT_DATE', 'SELECT_HOUR', 'SELECT_SERVICE', 'CONFIRM_BOOKING', 'CONFIRMED'],
+        enum: ['IDLE', 'SELECT_DATE', 'SELECT_HOUR', 'SELECT_SERVICE', 'CONFIRMED'],
         default: 'IDLE'
     },
     tempData: {
         date: String, // Temporarily store date while selecting hour
-        hour: String,
-        service: Object // Store selected service details
+        hour: String
     },
     updatedAt: {
         type: Date,

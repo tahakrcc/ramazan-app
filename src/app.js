@@ -6,8 +6,20 @@ const errorHandler = require('./middlewares/errorHandler');
 
 const app = express();
 
+const mongoSanitize = require('express-mongo-sanitize');
+const xss = require('xss-clean');
+const hpp = require('hpp');
 // Security Middleware
 app.use(helmet());
+
+// Data Sanitization against NoSQL Query Injection
+app.use(mongoSanitize());
+
+// Data Sanitization against XSS
+app.use(xss());
+
+// Prevent Parameter Pollution
+app.use(hpp());
 
 // CORS Configuration - More restrictive
 const allowedOrigins = [

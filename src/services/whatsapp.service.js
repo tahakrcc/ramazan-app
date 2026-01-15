@@ -4,71 +4,42 @@ const QRCode = require('qrcode');
 const { addDays, format, subDays, subHours } = require('date-fns');
 const AppointmentService = require('./appointment.service');
 const BotState = require('../models/botState.model');
-const Blacklist = require('../models/blacklist.model');
-const ClosedDate = require('../models/closedDate.model'); // Added ClosedDate
 const logger = require('../config/logger');
 
-const Settings = require('../models/settings.model');
-const Service = require('../models/service.model');
-
-// ============= DYNAMIC CONFIGURATION =============
-const getConfig = async () => {
-    let settings = await Settings.findOne();
-    if (!settings) settings = {
-        appointmentStartHour: 8,
-        appointmentEndHour: 20,
-        businessAddress: 'Movenpick Hotel -1 Kat - Malatya',
-        businessMapsLink: 'https://maps.google.com'
-    };
-
-    const services = await Service.find({ isActive: true });
-
-    // Default services fallback used mostly for seeding or critical fail
-    const defaultServices = [
+// ============= CONFIGURATION =============
+const CONFIG = {
+    businessName: 'By Ramazan',
+    workingHours: { start: 8, end: 20 }, // 08:00 - 20:00
+    services: [
         { id: 'sac', name: 'Saç Kesimi', price: 500, duration: 60 },
         { id: 'sakal', name: 'Sakal', price: 300, duration: 60 },
         { id: 'sac_sakal', name: 'Saç + Sakal', price: 600, duration: 60 }
-    ];
-
-    return {
-        businessName: 'By Ramazan',
-        workingHours: { start: settings.appointmentStartHour, end: settings.appointmentEndHour },
-        bookingRangeDays: settings.bookingRangeDays, // Added booking range
-        services: services.length > 0 ? services : defaultServices,
-        location: {
-            address: settings.businessAddress,
-            mapsLink: settings.businessMapsLink
-        }
-    };
+    ],
+    location: {
+        address: 'Movenpick Hotel -1 Kat - Malatya',
+        mapsLink: 'https://www.google.com/maps?gs_lcrp=EgZjaHJvbWUqEggBEC4YJxjHARjRAxiABBiKBTIGCAAQRRg5MhIIARAuGCcYxwEY0QMYgAQYigUyBggCEEUYQDIQCAMQRRgTGCcYOxiABBiKBTIHCAQQABiABDIWCAUQLhivARjHARiABBiYBRiZBRieBTIHCAYQABiABDIHCAcQABiABNIBCDE2MDNqMGo3qAIAsAIA&um=1&ie=UTF-8&fb=1&gl=tr&sa=X&geocode=KdFDqFFTN3ZAMQK_H203Wt62&daddr=%C4%B0n%C3%B6n%C3%BC,+%C4%B0n%C3%B6n%C3%BC+Cd.+No:174,+44090+Ye%C5%9Filyurt/Malatya'
+    }
 };
-
 
 // Helper to parse turkish dates
 const parseTurkishDate = (text) => {
-    const lower = text.toLowerCase()
-        .replace(/ı/g, 'i') // Normalize turkish chars for easier matching
-        .replace(/ğ/g, 'g')
-        .replace(/ü/g, 'u')
-        .replace(/ş/g, 's')
-        .replace(/ö/g, 'o')
-        .replace(/ç/g, 'c');
-
+    const lower = text.toLowerCase();
     const today = new Date();
 
-    if (lower.includes('bugun')) return format(today, 'yyyy-MM-dd');
-    if (lower.includes('yarin')) return format(addDays(today, 1), 'yyyy-MM-dd');
-    if (lower.includes('yarindan sonra')) return format(addDays(today, 2), 'yyyy-MM-dd');
+    if (lower.includes('bugün')) return format(today, 'yyyy-MM-dd');
+    if (lower.includes('yarın')) return format(addDays(today, 1), 'yyyy-MM-dd');
+    if (lower.includes('yarından sonra')) return format(addDays(today, 2), 'yyyy-MM-dd');
 
     const monthMap = {
-        'ocak': '01', 'subat': '02', 'mart': '03', 'nisan': '04', 'mayis': '05', 'haziran': '06',
-        'temmuz': '07', 'agustos': '08', 'eylul': '09', 'ekim': '10', 'kasim': '11', 'aralik': '12'
+        'ocak': '01', 'şubat': '02', 'mart': '03', 'nisan': '04', 'mayıs': '05', 'haziran': '06',
+        'temmuz': '07', 'ağustos': '08', 'eylül': '09', 'ekim': '10', 'kasım': '11', 'aralık': '12'
     };
 
     for (const [month, code] of Object.entries(monthMap)) {
         if (lower.includes(month)) {
-            const dayMatch = lower.match(new RegExp(`(\\d{1,2})\\s*${month}`));
+            const dayMatch = lower.match(/(\d{1,2})/);
             if (dayMatch) {
-                const day = dayMatch[1].padStart(2, '0');
+                const day = dayMatch[0].padStart(2, '0');
                 const currentYear = today.getFullYear();
                 return `${currentYear}-${code}-${day}`;
             }
@@ -85,44 +56,17 @@ const parseTurkishDate = (text) => {
     return null;
 };
 
-const parseTime = (text, workingHours) => {
-    // 1. Explicit time format (14:00, 14.00)
-    const timeMatch = text.match(/(\d{1,2})[:.](\d{2})/);
+const parseTime = (text) => {
+    const timeMatch = text.match(/(\d{1,2})[:.]?00/);
     if (timeMatch) {
-        let hour = parseInt(timeMatch[1]);
-        if (hour >= workingHours.start && hour < workingHours.end) {
-            return `${String(hour).padStart(2, '0')}:00`;
-        }
+        const hour = timeMatch[1].padStart(2, '0');
+        return `${hour}:00`;
     }
 
-    // 2. "Saat 14" format
-    const hourPrefixMatch = text.match(/saat\s*(\d{1,2})/i);
-    if (hourPrefixMatch) {
-        let hour = parseInt(hourPrefixMatch[1]);
-        if (hour >= workingHours.start && hour < workingHours.end) {
-            return `${String(hour).padStart(2, '0')}:00`;
-        }
-    }
-
-    // 3. Standalone number check (Risky for dates like "16 Ocak")
-    // We must ensure this number is NOT followed by a month name
-    const months = ['ocak', 'şubat', 'subat', 'mart', 'nisan', 'mayıs', 'mayis', 'haziran', 'temmuz', 'ağustos', 'agustos', 'eylül', 'eylul', 'ekim', 'kasım', 'kasim', 'aralık', 'aralik'];
-
-    // Regex explanation:
-    // (\d{1,2})  -> Match 1 or 2 digits
-    // (?!\d)     -> Not followed by another digit
-    // (?!\s*(?:ocak|...)) -> Negative lookahead: Not followed by any month name
-    const monthPattern = months.join('|');
-    const standaloneRegex = new RegExp(`(\\d{1,2})(?!\\d)(?!\\s*(?:${monthPattern}))`, 'i');
-
-    const hourMatch = text.match(standaloneRegex);
-    if (hourMatch) {
-        let hour = parseInt(hourMatch[1]);
-        // Valid working hours check to filter out unlikely numbers (e.g. "3 elma")
-        // But context matters. For now, strict strict working hours.
-        if (hour >= workingHours.start && hour < workingHours.end) {
-            return `${String(hour).padStart(2, '0')}:00`;
-        }
+    const hourMatch = text.match(/(?:saat\s*)?(\d{1,2})(?!\d)/);
+    if (hourMatch && parseInt(hourMatch[1]) >= CONFIG.workingHours.start && parseInt(hourMatch[1]) < CONFIG.workingHours.end) {
+        const hour = hourMatch[1].padStart(2, '0');
+        return `${hour}:00`;
     }
 
     return null;
@@ -142,16 +86,16 @@ const findNextAvailableDays = async (startDate, maxDays = 7) => {
 };
 
 // Parse service from text
-const parseService = (text, services) => {
+const parseService = (text) => {
     const lower = text.toLowerCase();
-    if (lower.includes('saç') && lower.includes('sakal')) return services.find(s => s.id === 'sac_sakal');
-    if (lower.includes('sakal')) return services.find(s => s.id === 'sakal');
-    if (lower.includes('saç') || lower.includes('kesim')) return services.find(s => s.id === 'sac');
+    if (lower.includes('saç') && lower.includes('sakal')) return CONFIG.services.find(s => s.id === 'sac_sakal');
+    if (lower.includes('sakal')) return CONFIG.services.find(s => s.id === 'sakal');
+    if (lower.includes('saç') || lower.includes('kesim')) return CONFIG.services.find(s => s.id === 'sac');
 
     // Check by number
-    if (lower.includes('1')) return services[0];
-    if (lower.includes('2')) return services[1];
-    if (lower.includes('3')) return services[2];
+    if (lower.includes('1')) return CONFIG.services[0];
+    if (lower.includes('2')) return CONFIG.services[1];
+    if (lower.includes('3')) return CONFIG.services[2];
 
     return null;
 };
@@ -169,16 +113,8 @@ const client = new Client({
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
-            '--disable-gpu',
-            '--ignore-certificate-errors',
-            '--ignore-certificate-errors-spki-list',
-            '--disable-features=IsolateOrigins,site-per-process'
-        ],
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
-    },
-    webVersionCache: {
-        type: 'remote',
-        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2409.2.html',
+            '--disable-gpu'
+        ]
     }
 });
 
@@ -216,7 +152,6 @@ const getQR = () => qrStream;
 
 client.on('message', async (msg) => {
     const chat = await msg.getChat();
-    // console.log('Message received:', msg.body, 'From:', msg.from, 'IsGroup:', chat.isGroup); // Removed for privacy
     if (chat.isGroup) return;
 
     try {
@@ -228,120 +163,17 @@ client.on('message', async (msg) => {
 });
 
 const handleMessage = async (msg) => {
-    const config = await getConfig();
     const sender = msg.from;
     const phone = sender.replace('@c.us', '');
     const text = msg.body.trim().toLowerCase();
-
-    // 1. BLACKLIST CHECK
-    const isBlocked = await Blacklist.findOne({ phone });
-    if (isBlocked) {
-        logger.warn(`Blocked user tried to message: ${phone}`);
-        return; // Ignore message
-    }
-
-    // 2. ADMIN COMMANDS (Run only if sender is self/admin)
-    // Checking if the sender is the bot itself (Admin)
-    // 2. ADMIN COMMANDS (Run only if sender is self/admin)
-    // Checking if the sender is the bot itself (Admin)
-    if (msg.fromMe || (client.info && msg.from === client.info.wid._serialized)) {
-
-        // Command: engelle 532xxxxxxx
-        if (text.startsWith('engelle ')) {
-            const targetPhone = text.split(' ')[1];
-            if (targetPhone && targetPhone.length > 9) {
-                await Blacklist.create({ phone: targetPhone });
-                await msg.reply(`✅ ${targetPhone} engellendi.`);
-            } else {
-                await msg.reply('❌ Hatalı numara formatı. Örnek: engelle 90532xxxxxxx');
-            }
-            return;
-        }
-
-        // Command: engel kaldır 532xxxxxxx
-        if (text.startsWith('engel kaldır ')) {
-            const targetPhone = text.split(' ')[2]; // "engel" "kaldır" "numara"
-            if (targetPhone) {
-                await Blacklist.findOneAndDelete({ phone: targetPhone });
-                await msg.reply(`✅ ${targetPhone} engeli kaldırıldı.`);
-            }
-            return;
-        }
-
-        // Command: kapat [tarih]
-        if (text.startsWith('kapat ')) {
-            const dateStr = text.replace('kapat ', '').trim();
-            const parsedDate = parseTurkishDate(dateStr);
-
-            if (parsedDate) {
-                // Check if already closed
-                const existing = await ClosedDate.findOne({ date: parsedDate });
-                if (existing) {
-                    await msg.reply(`⚠️ ${parsedDate} tarihi zaten kapalı.`);
-                } else {
-                    await ClosedDate.create({ date: parsedDate, reason: 'WhatsApp üzerinden kapatıldı' });
-                    await msg.reply(`✅ ${parsedDate} tarihi başarıyla randevulara kapatıldı.`);
-                }
-            } else {
-                await msg.reply('❌ Tarih anlaşılamadı. Örnek: kapat yarın, kapat 25.12.2024');
-            }
-            return;
-        }
-
-        // Command: aç [tarih] (Re-open)
-        if (text.startsWith('aç ')) {
-            const dateStr = text.replace('aç ', '').trim();
-            const parsedDate = parseTurkishDate(dateStr);
-
-            if (parsedDate) {
-                const deleted = await ClosedDate.findOneAndDelete({ date: parsedDate });
-                if (deleted) {
-                    await msg.reply(`✅ ${parsedDate} tarihi tekrar açıldı.`);
-                } else {
-                    await msg.reply(`⚠️ ${parsedDate} tarihi zaten açık.`);
-                }
-            } else {
-                await msg.reply('❌ Tarih anlaşılamadı. Örnek: aç yarın');
-            }
-            return;
-        }
-
-        // Command: bugün (Get today's schedule)
-        if (text === 'bugün') {
-            const today = new Date().toISOString().split('T')[0];
-            const appointments = await AppointmentService.getDailyAppointments(today);
-
-            if (appointments.length === 0) {
-                await msg.reply(`📅 *${today}* tarihinde henüz randevu yok.`);
-            } else {
-                let response = `📅 *${today} - Günlük Program*\n`;
-                appointments.forEach(app => {
-                    response += `\n⏰ *${app.hour}* - *${app.customerName}*\n     ✂️ _${app.service || 'Genel'}_\n`;
-                });
-                await msg.reply(response);
-            }
-            return;
-        }
-    }
-
-    // If no admin command matched, DO NOT RETURN. 
-    // Let it fall through to normal user logic so admin can use "randevu", "fiyat", etc.
-    // Let it fall through to normal user logic so admin can use "randevu", "fiyat", etc.
 
     // Get customer name with fallback (whatsapp-web.js bug workaround)
     let customerName = 'Değerli Müşterimiz';
     try {
         const contact = await msg.getContact();
-        customerName = contact.pushname || contact.name || contact.shortName;
-
-        // Fallback to notifyName (raw data) if standard contact properties fail
-        if (!customerName && msg._data && msg._data.notifyName) {
-            customerName = msg._data.notifyName;
-        }
-
-        if (!customerName) customerName = 'Değerli Müşterimiz';
+        customerName = contact.pushname || contact.name || 'Değerli Müşterimiz';
     } catch (e) {
-        logger.warn('Contact name fetch failed:', e);
+        // Ignore contact fetch errors
     }
 
     let userState = await BotState.findOne({ phone });
@@ -360,50 +192,10 @@ const handleMessage = async (msg) => {
         return;
     }
 
-    // Back command
-    if ((text === 'geri' || text === 'geri gel' || text === 'vazgeç') && userState.state !== 'IDLE') {
-        if (userState.state === 'SELECT_HOUR') {
-            userState.state = 'SELECT_DATE';
-            userState.tempData = {};
-            await userState.save();
-            await msg.reply(`Sayın ${customerName},\n\nTamam, tarih seçimine geri döndük.\n\nLütfen yeni bir tarih yazınız (örn: Yarın, 25 Aralık).`);
-            return;
-        } else if (userState.state === 'SELECT_SERVICE') {
-            userState.state = 'SELECT_HOUR';
-            // We need to re-show slots. Since tempData has the date, we can fetch slots again.
-            // However, simplicity is better: just ask for hour again.
-            await userState.save();
-
-            const slots = await AppointmentService.getAvailableSlots(userState.tempData.date);
-            const slotList = slots.map(s => `• ${s}`).join('\n');
-
-            await msg.reply(`Sayın ${customerName},\n\nTamam, saat seçimine geri döndük.\n\n${userState.tempData.date} için müsait saatler:\n\n${slotList}\n\nLütfen saat seçiniz.`);
-            return;
-        } else if (userState.state === 'CONFIRM_BOOKING') {
-            userState.state = 'SELECT_SERVICE';
-            await userState.save();
-
-            // Re-show service list
-            const config = await getConfig();
-            let serviceList = `Sayın ${customerName},\n\nTamam, hizmet seçimine geri döndük.\n\n${userState.tempData.date} saat ${userState.tempData.hour} için hizmet seçiniz:\n`;
-            config.services.forEach((s, i) => {
-                serviceList += `\n${i + 1}. ${s.name} - ${s.price}₺`;
-            });
-            await msg.reply(serviceList);
-            return;
-        } else if (userState.state === 'SELECT_DATE') {
-            userState.state = 'IDLE';
-            userState.tempData = {};
-            await userState.save();
-            await msg.reply(`Sayın ${customerName},\n\nAna menüye döndük. Randevu almak için "randevu" yazabilirsiniz.`);
-            return;
-        }
-    }
-
     // Price inquiry
     if (text.includes('fiyat') || text.includes('ücret') || text.includes('kaç para') || text.includes('ne kadar')) {
         let priceList = `Sayın ${customerName},\n\nHizmet fiyatlarımız:\n`;
-        config.services.forEach(s => {
+        CONFIG.services.forEach(s => {
             priceList += `\n• ${s.name}: ${s.price}₺`;
         });
         priceList += `\n\nTüm hizmetlerimiz yaklaşık 1 saat sürmektedir.`;
@@ -413,13 +205,13 @@ const handleMessage = async (msg) => {
 
     // Working hours inquiry
     if (text.includes('saat kaç') || text.includes('kaça kadar') || text.includes('çalışma saat') || text.includes('açık mı')) {
-        await msg.reply(`Sayın ${customerName},\n\nÇalışma saatlerimiz:\n🕗 ${config.workingHours.start}:00 - ${config.workingHours.end}:00\n\nHer gün hizmetinizdeyiz.`);
+        await msg.reply(`Sayın ${customerName},\n\nÇalışma saatlerimiz:\n🕗 ${CONFIG.workingHours.start}:00 - ${CONFIG.workingHours.end}:00\n\nHer gün hizmetinizdeyiz.`);
         return;
     }
 
     // Location inquiry
     if (text.includes('adres') || text.includes('nerede') || text.includes('konum') || text.includes('yer')) {
-        await msg.reply(`Sayın ${customerName},\n\n📍 Adresimiz:\n${config.location.address}\n\n🗺️ Google Maps:\n${config.location.mapsLink}`);
+        await msg.reply(`Sayın ${customerName},\n\n📍 Adresimiz:\n${CONFIG.location.address}\n\n🗺️ Google Maps:\n${CONFIG.location.mapsLink}`);
         return;
     }
 
@@ -427,7 +219,7 @@ const handleMessage = async (msg) => {
     if (text.includes('randevum ne zaman') || text.includes('randevum var mı')) {
         const appt = await AppointmentService.getMyAppointment(phone);
         if (appt) {
-            const service = config.services.find(s => s.id === appt.service) || { name: 'Genel', price: '-' };
+            const service = CONFIG.services.find(s => s.id === appt.service) || { name: 'Genel', price: '-' };
             await msg.reply(`Sayın ${customerName},\n\nMevcut randevunuz:\n📅 Tarih: ${appt.date}\n⏰ Saat: ${appt.hour}\n💇 Hizmet: ${service.name}\n💰 Ücret: ${service.price}₺\n\nSizi bekliyoruz.`);
         } else {
             await msg.reply(`Sayın ${customerName},\n\nŞu an için kayıtlı bir randevunuz bulunmamaktadır.\n\nRandevu almak için "randevu" yazabilirsiniz.`);
@@ -439,17 +231,8 @@ const handleMessage = async (msg) => {
     if (text.includes('randevu') && (text.includes('iptal') || text.includes('sil') || text.includes('vazgeç'))) {
         const appt = await AppointmentService.getMyAppointment(phone);
         if (appt) {
-            await AppointmentService.deleteAppointment(appt._id);
-            await msg.reply(`Sayın ${customerName},\n\n${appt.date} tarihli saat ${appt.hour} randevunuz sistemden tamamen silinmiştir.\n\nYeniden randevu almak için "randevu" yazabilirsiniz.`);
-
-            // ADMIN NOTIFICATION (Cancellation)
-            try {
-                const adminMsg = `⚠️ *RANDEVU SİLİNDİ*\n\n👤 Müşteri: ${customerName}\n📱 Tel: ${phone}\n📅 Tarih: ${appt.date}\n⏰ Saat: ${appt.hour}`;
-                if (client.info && client.info.wid) {
-                    await client.sendMessage(client.info.wid._serialized, adminMsg);
-                }
-            } catch (ignore) { }
-
+            await AppointmentService.cancelAppointment(appt._id);
+            await msg.reply(`Sayın ${customerName},\n\n${appt.date} tarihli saat ${appt.hour} randevunuz iptal edilmiştir.\n\nYeniden randevu almak için "randevu" yazabilirsiniz.`);
         } else {
             await msg.reply(`Sayın ${customerName},\n\nİptal edilecek aktif bir randevunuz bulunmamaktadır.`);
         }
@@ -478,7 +261,7 @@ const handleMessage = async (msg) => {
             if (text.includes('randevu') || text === 'merhaba' || text === 'selam' || text === 'slm') {
                 // Check for direct booking attempt
                 const parsedDate = parseTurkishDate(text);
-                const parsedTime = parseTime(text, config.workingHours);
+                const parsedTime = parseTime(text);
 
                 if (parsedDate && parsedTime) {
                     // Direct booking attempt
@@ -487,7 +270,7 @@ const handleMessage = async (msg) => {
                     await userState.save();
 
                     let serviceList = `Sayın ${customerName},\n\n${parsedDate} saat ${parsedTime} için randevu oluşturuyoruz.\n\nLütfen hizmet seçiniz:\n`;
-                    config.services.forEach((s, i) => {
+                    CONFIG.services.forEach((s, i) => {
                         serviceList += `\n${i + 1}. ${s.name} - ${s.price}₺`;
                     });
                     serviceList += `\n\nNumara veya hizmet adı yazabilirsiniz.`;
@@ -497,18 +280,18 @@ const handleMessage = async (msg) => {
 
                 userState.state = 'SELECT_DATE';
                 await userState.save();
-                await msg.reply(`Sayın ${customerName},\n\n${config.businessName}'a hoş geldiniz.\n\nRandevu için tarih ve saat belirtiniz.\n\nÖrnekler:\n• "25 Aralık 14:00"\n• "Yarın 15:00"\n• Sadece tarih yazarsanız müsait saatleri gösteririz\n\nÇalışma saatlerimiz: ${config.workingHours.start}:00 - ${config.workingHours.end}:00`);
+                await msg.reply(`Sayın ${customerName},\n\n${CONFIG.businessName}'a hoş geldiniz.\n\nRandevu için tarih ve saat belirtiniz.\n\nÖrnekler:\n• "25 Aralık 14:00"\n• "Yarın 15:00"\n• Sadece tarih yazarsanız müsait saatleri gösteririz\n\nÇalışma saatlerimiz: ${CONFIG.workingHours.start}:00 - ${CONFIG.workingHours.end}:00`);
             } else {
-                await msg.reply(`Sayın ${customerName},\n\n${config.businessName} otomatik randevu sistemine hoş geldiniz.\n\n📅 Randevu almak için "randevu" yazınız\n🔍 Randevunuzu sorgulamak için "randevum ne zaman"\n💰 Fiyatlar için "fiyatlar"\n📍 Adres için "adres"\n🕐 Çalışma saatleri için "saat kaça kadar"`);
+                await msg.reply(`Sayın ${customerName},\n\n${CONFIG.businessName} otomatik randevu sistemine hoş geldiniz.\n\n📅 Randevu almak için "randevu" yazınız\n🔍 Randevunuzu sorgulamak için "randevum ne zaman"\n💰 Fiyatlar için "fiyatlar"\n📍 Adres için "adres"\n🕐 Çalışma saatleri için "saat kaça kadar"`);
             }
             break;
 
         case 'SELECT_DATE':
             const parsedDate = parseTurkishDate(text);
-            const parsedTime = parseTime(text, config.workingHours);
+            const parsedTime = parseTime(text);
 
             if (!parsedDate) {
-                await msg.reply(`Sayın ${customerName},\n\nGirdiğiniz tarih anlaşılamamıştır.\n\nÖrnekler: Bugün, Yarın, 25 Aralık, 25.12.2024\n\n(Geri dönmek için "geri" yazabilirsiniz)`);
+                await msg.reply(`Sayın ${customerName},\n\nGirdiğiniz tarih anlaşılamamıştır.\n\nÖrnekler: Bugün, Yarın, 25 Aralık, 25.12.2024`);
                 return;
             }
 
@@ -520,7 +303,7 @@ const handleMessage = async (msg) => {
                 await userState.save();
 
                 let serviceList = `Sayın ${customerName},\n\n${parsedDate} saat ${parsedTime} için randevu oluşturuyoruz.\n\nLütfen hizmet seçiniz:\n`;
-                config.services.forEach((s, i) => {
+                CONFIG.services.forEach((s, i) => {
                     serviceList += `\n${i + 1}. ${s.name} - ${s.price}₺`;
                 });
                 await msg.reply(serviceList);
@@ -546,11 +329,11 @@ const handleMessage = async (msg) => {
             await userState.save();
 
             const slotList = slots.map(s => `• ${s}`).join('\n');
-            await msg.reply(`Sayın ${customerName},\n\n${parsedDate} için müsait saatler:\n\n${slotList}\n\nLütfen saat yazınız.\n\n(Geri dönmek için "geri" yazabilirsiniz)`);
+            await msg.reply(`Sayın ${customerName},\n\n${parsedDate} için müsait saatler:\n\n${slotList}\n\nLütfen saat yazınız.`);
             break;
 
         case 'SELECT_HOUR':
-            const selectedHour = parseTime(text, config.workingHours);
+            const selectedHour = parseTime(text);
 
             if (!selectedHour) {
                 await msg.reply(`Sayın ${customerName},\n\nSaat anlaşılamamıştır. Örnek: 14:00 veya 14`);
@@ -562,79 +345,46 @@ const handleMessage = async (msg) => {
             await userState.save();
 
             let serviceList = `Sayın ${customerName},\n\n${userState.tempData.date} saat ${selectedHour} için hizmet seçiniz:\n`;
-            config.services.forEach((s, i) => {
+            CONFIG.services.forEach((s, i) => {
                 serviceList += `\n${i + 1}. ${s.name} - ${s.price}₺`;
             });
-            await msg.reply(serviceList + '\n\n(Geri dönmek için "geri" yazabilirsiniz)');
+            await msg.reply(serviceList);
             break;
 
         case 'SELECT_SERVICE':
-            const service = parseService(text, config.services);
+            const service = parseService(text);
 
             if (!service) {
                 await msg.reply(`Sayın ${customerName},\n\nHizmet anlaşılamamıştır.\n\n1. Saç Kesimi\n2. Sakal\n3. Saç + Sakal\n\nNumara veya isim yazınız.`);
                 return;
             }
 
-            userState.tempData.service = service;
-            userState.state = 'CONFIRM_BOOKING';
-            await userState.save();
+            try {
+                await AppointmentService.createAppointment({
+                    customerName: customerName,
+                    phone: phone,
+                    date: userState.tempData.date,
+                    hour: userState.tempData.hour,
+                    service: service.id,
+                    createdFrom: 'whatsapp'
+                });
 
-            await msg.reply(`Sayın ${customerName},\n\nRandevu Onayı:\n📅 Tarih: ${userState.tempData.date}\n⏰ Saat: ${userState.tempData.hour}\n💇 Hizmet: ${service.name}\n💰 Ücret: ${service.price}₺\n\nOnaylıyor musunuz? (Evet / Hayır)\n\n(Geri dönmek için "geri" yazabilirsiniz)`);
-            break;
+                await msg.reply(`Sayın ${customerName},\n\nRandevunuz oluşturulmuştur.\n\n📅 Tarih: ${userState.tempData.date}\n⏰ Saat: ${userState.tempData.hour}\n💇 Hizmet: ${service.name}\n💰 Ücret: ${service.price}₺\n\n📍 Adres: ${CONFIG.location.address}\n\nSizi bekliyoruz. İyi günler dileriz.`);
 
-        case 'CONFIRM_BOOKING':
-            if (text === 'evet' || text === 'onaylıyorum' || text === 'e') {
-                try {
-                    const selectedService = userState.tempData.service; // Get from temp data
-
-                    await AppointmentService.createAppointment({
-                        customerName: customerName,
-                        phone: phone,
-                        date: userState.tempData.date,
-                        hour: userState.tempData.hour,
-                        service: selectedService.id,
-                        createdFrom: 'whatsapp'
-                    });
-
-                    await msg.reply(`Sayın ${customerName},\n\nRandevunuz başarıyla oluşturulmuştur. ✅\n\nSizi bekliyoruz. İyi günler dileriz.`);
-
-                    // ADMIN NOTIFICATION (Self-Message)
-                    try {
-                        const adminMsg = `🔔 *YENİ RANDEVU!*\n\n👤 Müşteri: ${customerName}\n📱 Tel: ${phone}\n📅 Tarih: ${userState.tempData.date}\n⏰ Saat: ${userState.tempData.hour}\n💇 İşlem: ${selectedService.name}`;
-                        // Send to own number (Note: client.info might be null if not fully ready, but usually fine here)
-                        if (client.info && client.info.wid) {
-                            await client.sendMessage(client.info.wid._serialized, adminMsg);
-                        } else {
-                            logger.warn('Admin notification failed: Client info not available');
-                        }
-                    } catch (adminErr) {
-                        logger.error('Failed to send admin notification', adminErr);
-                    }
-
-                    userState.state = 'IDLE';
-                    userState.tempData = {};
-                    await userState.save();
-
-                } catch (error) {
-                    if (error.message.includes('dolu')) {
-                        await msg.reply(`Sayın ${customerName},\n\nÜzgünüz, onay sırasında seçtiğiniz saat doldu.\n\nLütfen farklı bir saat seçiniz.`);
-                        userState.state = 'SELECT_DATE';
-                        await userState.save();
-                    } else {
-                        logger.error('Booking Creation Error:', error); // Log the exact error
-                        await msg.reply(`Sayın ${customerName},\n\nBir hata oluştu (${error.message}). Lütfen tekrar deneyiniz.`);
-                        userState.state = 'IDLE';
-                        await userState.save();
-                    }
-                }
-            } else if (text === 'hayır' || text === 'h' || text === 'iptal') {
                 userState.state = 'IDLE';
                 userState.tempData = {};
                 await userState.save();
-                await msg.reply(`Sayın ${customerName},\n\nRandevu işlemi iptal edilmiştir.`);
-            } else {
-                await msg.reply(`Sayın ${customerName},\n\nLütfen "Evet" veya "Hayır" yazınız.`);
+
+            } catch (error) {
+                if (error.message.includes('dolu')) {
+                    await msg.reply(`Sayın ${customerName},\n\nÜzgünüz, seçtiğiniz saat dolu hale gelmiştir.\n\nLütfen farklı bir saat seçiniz.`);
+                    userState.state = 'SELECT_DATE';
+                    await userState.save();
+                } else {
+                    await msg.reply(`Sayın ${customerName},\n\nBir hata oluştu. Lütfen tekrar deneyiniz.`);
+                    userState.state = 'IDLE';
+                    await userState.save();
+                }
             }
             break;
 
@@ -645,59 +395,9 @@ const handleMessage = async (msg) => {
     }
 };
 
-const pairWithPhone = async (phoneNumber) => {
-    try {
-        if (client.info && client.info.wid) {
-            throw new Error('Already connected');
-        }
-        // Ensure format is correct (remove +)
-        const formattedPhone = phoneNumber.replace('+', '').replace(/\s/g, '');
-
-        // Retry logic for pairing code request
-        let attempts = 0;
-        const maxAttempts = 3;
-
-        while (attempts < maxAttempts) {
-            try {
-                // Wait for page to be ready and stabilized
-                logger.info(`Waiting 10s for page stability before requesting code (Attempt ${attempts + 1})...`);
-                await new Promise(resolve => setTimeout(resolve, 10000));
-
-                const code = await client.requestPairingCode(formattedPhone);
-                return code;
-            } catch (err) {
-                attempts++;
-                logger.warn(`Pairing attempt ${attempts} failed:`, err);
-
-                if (attempts >= maxAttempts) throw err;
-
-                // Wait 2 seconds before retry
-                await new Promise(resolve => setTimeout(resolve, 2000));
-            }
-        }
-    } catch (error) {
-        logger.error('Pairing failed', error);
-        throw error;
-    }
-};
-
 const initialize = () => {
     client.initialize();
 };
 
-const logout = async () => {
-    try {
-        await client.logout();
-    } catch (ignored) { } // Ignore if already logged out
-
-    try {
-        await client.destroy();
-    } catch (ignored) { }
-
-    qrStream = null;
-    initialize(); // Re-init for fresh QR
-    return true;
-};
-
 // Export config for use in other modules
-module.exports = { initialize, getQR, pairWithPhone, logout, client };
+module.exports = { initialize, getQR, CONFIG };

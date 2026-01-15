@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/admin.controller');
-const settingsController = require('../controllers/settings.controller');
 const { protect } = require('../middlewares/auth.middleware');
 const { loginLimiter } = require('../middlewares/rateLimiter');
 const appointmentService = require('../services/appointment.service');
@@ -11,7 +10,7 @@ const Appointment = require('../models/appointment.model');
 const logger = require('../config/logger');
 
 // Public Admin Route
-router.post('/login', loginLimiter, adminController.login);
+router.post('/secure-login-action', loginLimiter, adminController.login);
 
 // Protected Admin Routes
 router.use(protect);
@@ -208,18 +207,4 @@ router.get('/stats', async (req, res, next) => {
     }
 });
 
-
-// Settings routes
-router.get('/settings', protect, settingsController.getSettings);
-router.put('/settings', protect, settingsController.updateSettings);
-
 module.exports = router;
-
-
-// Broadcast
-router.post('/broadcast', adminController.sendBroadcast);
-
-// WhatsApp Pairing
-const whatsappController = require('../controllers/whatsapp.controller');
-router.post('/whatsapp-pair', whatsappController.pairWithPhone);
-router.post('/whatsapp-logout', whatsappController.logout);
