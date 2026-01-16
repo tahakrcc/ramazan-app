@@ -40,6 +40,7 @@ const BookingPage = () => {
             <GrainOverlay />
             <CustomCursor />
             <WhatsAppButton />
+            <InstagramButton />
             <Nav />
             <AnimatePresence mode="wait">
                 {step === 0 ? (
@@ -84,25 +85,28 @@ const LandingView = ({ onStart }) => {
         >
             {/* Hero Section */}
             <section className="h-screen flex items-center justify-center relative overflow-hidden px-6">
-                {/* Abstract Background Shapes */}
-                <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 100, repeat: Infinity, ease: "linear" }}
-                    className="absolute top-[-20%] right-[-10%] w-[800px] h-[800px] bg-gold-500/5 rounded-full blur-[150px] pointer-events-none"
-                />
+                {/* Background Image */}
+                <div className="absolute inset-0 z-0">
+                    <img
+                        src="https://images.unsplash.com/photo-1618773928121-c32242e63f39?q=80&w=2070&auto=format&fit=crop"
+                        alt="Background"
+                        className="w-full h-full object-cover opacity-60"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-dark-950 via-dark-950/80 to-dark-950/40" />
+                </div>
 
-                <motion.div style={{ y: yHero, opacity: opacityHero }} className="z-10 text-center">
+                <motion.div style={{ y: yHero, opacity: opacityHero }} className="z-10 text-center relative">
                     <motion.div
                         initial={{ y: 50, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
                         transition={{ delay: 0.2, duration: 1 }}
                         className="mb-6 overflow-hidden"
                     >
-                        <p className="text-gold-500 tracking-[0.5em] text-xs md:text-sm uppercase font-bold">Est. 2014</p>
+                        <p className="text-gold-500 tracking-[0.5em] text-xs md:text-sm uppercase font-bold drop-shadow-md">Est. 2014</p>
                     </motion.div>
 
-                    <h1 className="text-[12vw] leading-[0.8] font-serif font-medium mb-8">
-                        <span className="block overflow-hidden"><motion.span initial={{ y: "100%" }} animate={{ y: 0 }} transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }} className="block text-white/90">BY</motion.span></span>
+                    <h1 className="text-[12vw] leading-[0.8] font-serif font-medium mb-8 drop-shadow-2xl">
+                        <span className="block overflow-hidden"><motion.span initial={{ y: "100%" }} animate={{ y: 0 }} transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }} className="block text-white">BY</motion.span></span>
                         <span className="block overflow-hidden"><motion.span initial={{ y: "100%" }} animate={{ y: 0 }} transition={{ duration: 1, delay: 0.1, ease: [0.22, 1, 0.36, 1] }} className="block text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-gray-400">RAMAZAN</motion.span></span>
                     </h1>
 
@@ -112,13 +116,13 @@ const LandingView = ({ onStart }) => {
                         transition={{ delay: 0.8 }}
                         className="flex flex-col items-center gap-8"
                     >
-                        <p className="max-w-md text-gray-300 text-sm md:text-base font-light leading-relaxed">
+                        <p className="max-w-md text-gray-200 text-sm md:text-base font-light leading-relaxed drop-shadow-md">
                             Erkek bakımında modern sanat. Sadece randevuyla çalışıyoruz.
                         </p>
 
                         <button
                             onClick={onStart}
-                            className="group relative px-10 py-5 bg-white/5 border border-white/20 hover:border-gold-500 hover:bg-gold-500 transition-all duration-500 rounded-sm overflow-hidden"
+                            className="group relative px-10 py-5 bg-white/10 border border-white/20 hover:border-gold-500 hover:bg-gold-500 transition-all duration-500 rounded-sm overflow-hidden backdrop-blur-sm"
                         >
                             <span className="relative z-10 text-xs tracking-[0.25em] uppercase text-white group-hover:text-dark-950 font-bold transition-colors duration-300">Randevu Al</span>
                         </button>
@@ -174,10 +178,13 @@ const ServicesSection = () => (
 );
 
 const BookingFlow = ({ onBack }) => {
-    const [bookingStep, setBookingStep] = useState(0); // 0: Service, 1: Date/Time, 2: Form, 3: Success
-    const [selection, setSelection] = useState({ service: null, date: null, time: null });
+    // 0: Person Count, 1: Service, 2: Date/Time, 3: Form, 4: Success
+    const [bookingStep, setBookingStep] = useState(0);
+    const [isDoubleBooking, setIsDoubleBooking] = useState(false);
+    const [selection, setSelection] = useState({ service: null, date: null, slots: [] });
     const [availableSlots, setAvailableSlots] = useState([]);
-    const [formData, setFormData] = useState({ name: '', phone: '' });
+    const [formData, setFormData] = useState({ name: '', phone: '', secondName: '', secondPhone: '' });
+    const [showSecondPerson, setShowSecondPerson] = useState(false);
 
     // Fetch Slots logic
     useEffect(() => {
@@ -194,29 +201,89 @@ const BookingFlow = ({ onBack }) => {
         }
     }, [selection.date]);
 
-    const handleServiceSelect = (s) => {
-        setSelection({ ...selection, service: s });
+    // Cleanup slots when switching dates
+    useEffect(() => {
+        setSelection(prev => ({ ...prev, slots: [] }));
+    }, [selection.date]);
+
+    const handlePersonCountSelect = (double) => {
+        setIsDoubleBooking(double);
         setBookingStep(1);
     };
 
-    const handleTimeSelect = (t) => {
-        setSelection({ ...selection, time: t });
+    const handleServiceSelect = (s) => {
+        setSelection({ ...selection, service: s });
         setBookingStep(2);
+    };
+
+    const handleTimeSelect = (t) => {
+        let newSlots = [...selection.slots];
+
+        if (isDoubleBooking) {
+            // If already picked 2, reset and pick new one
+            if (newSlots.length >= 2) {
+                newSlots = [t];
+            } else {
+                // If picking the same one, toggle off
+                if (newSlots.includes(t)) {
+                    newSlots = newSlots.filter(slot => slot !== t);
+                } else {
+                    newSlots.push(t);
+                }
+            }
+        } else {
+            // Single booking: just one slot always
+            newSlots = [t];
+        }
+
+        setSelection({ ...selection, slots: newSlots });
+
+        // Auto move next if conditions met
+        if (!isDoubleBooking) {
+            setBookingStep(3);
+        } else if (isDoubleBooking && newSlots.length === 2) {
+            // Small delay to let user see the 2nd selection
+            setTimeout(() => setBookingStep(3), 500);
+        }
     };
 
     const submitBooking = async (e) => {
         e.preventDefault();
+
+        // Validate
+        if (isDoubleBooking && selection.slots.length !== 2) {
+            toast.error('Lütfen 2 adet saat seçiniz.');
+            return;
+        }
+
         try {
+            // Sort slots to ensure chronological order (optional, but good for logic)
+            const sortedSlots = [...selection.slots].sort();
+
+            // Create First Appointment
             await API.post('/appointments', {
                 customerName: formData.name,
                 phone: formData.phone,
                 date: selection.date,
-                hour: selection.time,
+                hour: sortedSlots[0],
                 service: selection.service.id
             });
-            setBookingStep(3);
+
+            // Create Second Appointment
+            if (isDoubleBooking) {
+                await API.post('/appointments', {
+                    customerName: formData.secondName || formData.name, // Use 2nd person detail OR Main User
+                    phone: formData.secondPhone || formData.phone,
+                    date: selection.date,
+                    hour: sortedSlots[1],
+                    service: selection.service.id
+                });
+            }
+
+            setBookingStep(4);
         } catch (error) {
-            toast.error('Hata oluştu');
+            console.error(error);
+            toast.error('Hata oluştu. Seçilen saatler dolmuş olabilir.');
         }
     };
 
@@ -236,7 +303,7 @@ const BookingFlow = ({ onBack }) => {
                     {bookingStep > 0 ? 'Geri' : 'Ana Menü'}
                 </button>
                 <div className="flex gap-2">
-                    {[0, 1, 2].map(i => (
+                    {[0, 1, 2, 3].map(i => (
                         <div key={i} className={`w-2 h-2 rounded-full ${i <= bookingStep ? 'bg-gold-500 shadow-[0_0_10px_#D4AF37]' : 'bg-dark-800'}`} />
                     ))}
                 </div>
@@ -244,8 +311,35 @@ const BookingFlow = ({ onBack }) => {
 
             <div className="flex-1 flex flex-col justify-start max-w-3xl mx-auto w-full px-6 py-8 md:py-12 pt-8">
                 <AnimatePresence mode="wait">
+
+                    {/* STEP 0: Person Count Selection */}
                     {bookingStep === 0 && (
                         <motion.div key="step0" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                            <h2 className="text-4xl md:text-5xl font-serif mb-12 text-center text-white">Kaç Kişisiniz?</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <button
+                                    onClick={() => handlePersonCountSelect(false)}
+                                    className="p-10 border border-white/10 hover:border-gold-500 hover:bg-white/5 transition-all group rounded-sm flex flex-col items-center gap-4"
+                                >
+                                    <span className="text-6xl group-hover:scale-110 transition-transform">👤</span>
+                                    <h3 className="text-2xl font-serif text-white group-hover:text-gold-500">Tek Kişi</h3>
+                                    <p className="text-gray-400 text-sm">Kendim için randevu alacağım.</p>
+                                </button>
+                                <button
+                                    onClick={() => handlePersonCountSelect(true)}
+                                    className="p-10 border border-white/10 hover:border-gold-500 hover:bg-white/5 transition-all group rounded-sm flex flex-col items-center gap-4"
+                                >
+                                    <span className="text-6xl group-hover:scale-110 transition-transform">👥</span>
+                                    <h3 className="text-2xl font-serif text-white group-hover:text-gold-500">İki Kişi</h3>
+                                    <p className="text-gray-400 text-sm">Arkadaşımla geliyorum.</p>
+                                </button>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* STEP 1: Service Selection */}
+                    {bookingStep === 1 && (
+                        <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                             <h2 className="text-4xl md:text-5xl font-serif mb-12 text-center text-white">Hizmet Seçimi</h2>
                             <div className="grid gap-4">
                                 {CONFIG.services.map(s => (
@@ -264,11 +358,12 @@ const BookingFlow = ({ onBack }) => {
                         </motion.div>
                     )}
 
-                    {bookingStep === 1 && (
-                        <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                    {/* STEP 2: Date/Time Selection */}
+                    {bookingStep === 2 && (
+                        <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                             <h2 className="text-3xl md:text-5xl font-serif mb-2 text-center text-white">Zamanlama</h2>
                             <p className="text-center text-gold-500 mb-8 md:mb-12 text-xs md:text-sm uppercase tracking-widest font-bold">
-                                {selection.service?.name}
+                                {selection.service?.name} {isDoubleBooking && '(2 Saat Seçiniz)'}
                             </p>
 
                             {/* Date Scroller */}
@@ -320,74 +415,150 @@ const BookingFlow = ({ onBack }) => {
                             {/* Time Slots */}
                             {selection.date && (
                                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-3 md:grid-cols-4 gap-3 md:gap-4">
-                                    {availableSlots.length > 0 ? availableSlots.map(t => (
-                                        <button
-                                            key={t}
-                                            onClick={() => handleTimeSelect(t)}
-                                            className="py-3 md:py-4 border border-white/10 text-gray-300 hover:bg-gold-500 hover:border-gold-500 hover:text-dark-950 hover:font-bold transition-all rounded-sm text-sm md:text-base"
-                                        >
-                                            {t}
-                                        </button>
-                                    )) : (
+                                    {availableSlots.length > 0 ? availableSlots.map(t => {
+                                        const isSelected = selection.slots.includes(t);
+                                        const index = selection.slots.indexOf(t);
+
+                                        // Visual style based on selection
+                                        // First slot: Gold
+                                        // Second slot: White/Silver (if double booking)
+                                        let bgClass = "border-white/10 text-gray-300 hover:bg-gold-500 hover:border-gold-500 hover:text-dark-950";
+
+                                        if (isSelected) {
+                                            if (index === 0) bgClass = "bg-gold-500 text-dark-950 border-gold-500 font-bold shadow-[0_0_15px_rgba(212,175,55,0.4)]";
+                                            else if (index === 1) bgClass = "bg-gray-200 text-dark-950 border-gray-200 font-bold shadow-[0_0_15px_rgba(255,255,255,0.4)]";
+                                        }
+
+                                        return (
+                                            <button
+                                                key={t}
+                                                onClick={() => handleTimeSelect(t)}
+                                                className={`py-3 md:py-4 border transition-all rounded-sm text-sm md:text-base relative ${bgClass}`}
+                                            >
+                                                {t}
+                                                {isSelected && isDoubleBooking && (
+                                                    <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full text-[10px] flex items-center justify-center bg-dark-950 text-white font-bold border border-white/20">
+                                                        {index + 1}
+                                                    </span>
+                                                )}
+                                            </button>
+                                        );
+                                    }) : (
                                         <div className="col-span-4 text-center text-gray-400 py-4 italic">Müsait saat bulunamadı.</div>
                                     )}
                                 </motion.div>
                             )}
+
+                            {isDoubleBooking && selection.slots.length > 0 && (
+                                <div className="mt-8 text-center bg-white/5 p-4 rounded-sm border border-white/10">
+                                    <p className="text-gray-300 text-sm mb-2">Seçilen Saatler:</p>
+                                    <div className="flex justify-center gap-4">
+                                        {selection.slots[0] && <span className="text-gold-500 font-bold">{selection.slots[0]} (1. Kişi)</span>}
+                                        {selection.slots[1] && <span className="text-white font-bold">{selection.slots[1]} (2. Kişi)</span>}
+                                    </div>
+                                </div>
+                            )}
+
                         </motion.div>
                     )}
 
-                    {bookingStep === 2 && (
-                        <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-                            <h2 className="text-3xl md:text-5xl font-serif mb-8 md:mb-12 text-center text-white">Son Adım</h2>
+                    {/* STEP 3: Details Form */}
+                    {bookingStep === 3 && (
+                        <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+                            <h2 className="text-3xl md:text-5xl font-serif mb-8 md:mb-12 text-center text-white">Yolcu Bilgileri</h2>
                             <form onSubmit={submitBooking} className="space-y-6 md:space-y-8 max-w-md mx-auto">
-                                <div className="space-y-2">
-                                    <label className="text-xs uppercase tracking-widest text-gold-500 font-bold ml-1">Ad Soyad</label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={formData.name}
-                                        onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                        className="w-full bg-white/5 border-b-2 border-white/10 py-3 md:py-4 px-4 text-lg md:text-xl text-white focus:outline-none focus:border-gold-500 focus:bg-white/10 transition-all rounded-t-sm"
-                                        placeholder="İsminizi giriniz"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-xs uppercase tracking-widest text-gold-500 font-bold ml-1">Telefon</label>
-                                    <input
-                                        type="tel"
-                                        required
-                                        value={formData.phone}
-                                        onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                                        className="w-full bg-white/5 border-b-2 border-white/10 py-3 md:py-4 px-4 text-lg md:text-xl text-white focus:outline-none focus:border-gold-500 focus:bg-white/10 transition-all rounded-t-sm"
-                                        placeholder="05XX XXX XX XX"
-                                    />
-                                </div>
 
-                                <div className="pt-4 md:pt-8">
-                                    <div className="bg-white/5 p-6 md:p-8 mb-6 md:mb-8 border border-white/10 rounded-sm">
-                                        <div className="flex justify-between mb-4 pb-4 border-b border-white/5">
-                                            <span className="text-gray-400 text-xs md:text-sm uppercase tracking-wider">Hizmet</span>
-                                            <span className="text-white font-serif text-base md:text-lg">{selection.service?.name}</span>
-                                        </div>
-                                        <div className="flex justify-between mb-2">
-                                            <span className="text-gray-400 text-xs md:text-sm uppercase tracking-wider">Tarih</span>
-                                            <span className="text-white font-mono text-sm md:text-base">{selection.date}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-400 text-xs md:text-sm uppercase tracking-wider">Saat</span>
-                                            <span className="text-gold-500 font-bold text-sm md:text-base">{selection.time}</span>
-                                        </div>
+                                {/* 1. Person */}
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <div className="w-6 h-6 rounded-full bg-gold-500 text-dark-950 flex items-center justify-center font-bold text-xs">1</div>
+                                        <h3 className="text-white font-serif text-lg">Hizmet Alan Kişi</h3>
                                     </div>
 
+                                    <div className="space-y-2">
+                                        <label className="text-xs uppercase tracking-widest text-gold-500 font-bold ml-1">Ad Soyad</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={formData.name}
+                                            onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                            className="w-full bg-white/5 border-b-2 border-white/10 py-3 md:py-4 px-4 text-lg md:text-xl text-white focus:outline-none focus:border-gold-500 focus:bg-white/10 transition-all rounded-t-sm"
+                                            placeholder="İsminizi giriniz"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs uppercase tracking-widest text-gold-500 font-bold ml-1">Telefon</label>
+                                        <input
+                                            type="tel"
+                                            required
+                                            value={formData.phone}
+                                            onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                                            className="w-full bg-white/5 border-b-2 border-white/10 py-3 md:py-4 px-4 text-lg md:text-xl text-white focus:outline-none focus:border-gold-500 focus:bg-white/10 transition-all rounded-t-sm"
+                                            placeholder="05XX XXX XX XX"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* 2. Person (Optional) */}
+                                {isDoubleBooking && (
+                                    <div className="pt-6 border-t border-white/10">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowSecondPerson(!showSecondPerson)}
+                                            className="flex items-center gap-2 w-full text-left mb-4 hover:opacity-80 transition-opacity"
+                                        >
+                                            <div className="w-6 h-6 rounded-full bg-white text-dark-950 flex items-center justify-center font-bold text-xs">2</div>
+                                            <h3 className="text-white font-serif text-lg flex-1">2. Kişi Bilgileri</h3>
+                                            <span className="text-gray-400 text-xs uppercase">{showSecondPerson ? 'Gizle' : 'Ekle (Opsiyonel)'}</span>
+                                        </button>
+
+                                        <AnimatePresence>
+                                            {showSecondPerson && (
+                                                <motion.div
+                                                    initial={{ height: 0, opacity: 0 }}
+                                                    animate={{ height: 'auto', opacity: 1 }}
+                                                    exit={{ height: 0, opacity: 0 }}
+                                                    className="space-y-4 overflow-hidden"
+                                                >
+                                                    <p className="text-gray-500 text-xs italic mb-2">
+                                                        *Doldurulmazsa, 2. randevu da {formData.name || 'sizin'} adınıza oluşturulur.
+                                                    </p>
+                                                    <div className="space-y-2">
+                                                        <label className="text-xs uppercase tracking-widest text-gray-400 font-bold ml-1">2. Kişi Ad Soyad</label>
+                                                        <input
+                                                            type="text"
+                                                            value={formData.secondName}
+                                                            onChange={e => setFormData({ ...formData, secondName: e.target.value })}
+                                                            className="w-full bg-white/5 border-b-2 border-white/10 py-3 md:py-4 px-4 text-lg text-white focus:outline-none focus:border-white focus:bg-white/10 transition-all rounded-t-sm"
+                                                            placeholder="Arkadaşınızın ismi"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-xs uppercase tracking-widest text-gray-400 font-bold ml-1">2. Kişi Telefon</label>
+                                                        <input
+                                                            type="tel"
+                                                            value={formData.secondPhone}
+                                                            onChange={e => setFormData({ ...formData, secondPhone: e.target.value })}
+                                                            className="w-full bg-white/5 border-b-2 border-white/10 py-3 md:py-4 px-4 text-lg text-white focus:outline-none focus:border-white focus:bg-white/10 transition-all rounded-t-sm"
+                                                            placeholder="05XX XXX XX XX"
+                                                        />
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
+                                )}
+
+                                <div className="pt-4 md:pt-8 text-center">
                                     <button type="submit" className="w-full bg-gold-500 text-dark-950 py-4 md:py-5 font-bold uppercase tracking-[0.2em] hover:bg-white hover:scale-[1.02] transition-all rounded-sm shadow-[0_0_20px_rgba(212,175,55,0.2)] text-sm md:text-base">
-                                        Onayla & Bitir
+                                        {isDoubleBooking ? 'Randevuları Onayla' : 'Randevuyu Onayla'}
                                     </button>
                                 </div>
                             </form>
                         </motion.div>
                     )}
 
-                    {bookingStep === 3 && (
+                    {rankingStep === 4 && (
                         <motion.div key="success" className="text-center py-20">
                             <motion.div
                                 initial={{ scale: 0 }} animate={{ scale: 1 }}
@@ -396,7 +567,9 @@ const BookingFlow = ({ onBack }) => {
                                 ✓
                             </motion.div>
                             <h2 className="text-5xl font-serif mb-6">Teşekkürler</h2>
-                            <p className="text-gray-400 mb-12">Randevunuz başarıyla oluşturuldu.</p>
+                            <p className="text-gray-400 mb-12">
+                                {isDoubleBooking ? 'Randevularınız başarıyla oluşturuldu.' : 'Randevunuz başarıyla oluşturuldu.'}
+                            </p>
                             <button onClick={() => window.location.reload()} className="text-xs uppercase tracking-widest text-gold-500 border-b border-gold-500 pb-1 hover:text-white hover:border-white transition-colors">
                                 Ana Sayfaya Dön
                             </button>
@@ -503,6 +676,26 @@ const WhatsAppButton = () => (
             alt="WhatsApp"
             className="w-16 h-16 drop-shadow-lg"
         />
+    </motion.a>
+);
+
+const InstagramButton = () => (
+    <motion.a
+        href="https://www.instagram.com/by_ramazan1?igsh=MTBvNm12aW5yZDA2Mw=="
+        target="_blank"
+        rel="noopener noreferrer"
+        initial={{ opacity: 0, x: -50 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ delay: 1.2, duration: 0.5 }}
+        className="fixed bottom-28 left-8 z-50 group hover:scale-110 transition-transform duration-300"
+    >
+        <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-lg overflow-hidden">
+            <img
+                src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Instagram_icon.png/2048px-Instagram_icon.png"
+                alt="Instagram"
+                className="w-10 h-10 object-contain"
+            />
+        </div>
     </motion.a>
 );
 

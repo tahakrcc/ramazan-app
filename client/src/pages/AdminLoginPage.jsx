@@ -29,8 +29,8 @@ const AdminLoginPage = () => {
         <div className="min-h-screen bg-gray-900 flex items-center justify-center px-6">
             <div className="w-full max-w-md">
                 <div className="text-center mb-10">
-                    <h1 className="text-3xl font-bold text-white mb-2">By Ramazan</h1>
-                    <p className="text-gray-400">Yönetim Paneli</p>
+                    <h1 className="text-3xl font-bold text-white mb-2 font-serif tracking-widest">BY RAMAZAN</h1>
+                    <p className="text-gray-400 text-sm uppercase tracking-wider">Yönetim Paneli</p>
                 </div>
 
                 <div className="bg-gray-800 rounded-2xl p-8">
