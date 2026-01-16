@@ -52,7 +52,9 @@ app.use(hpp());
 const allowedOrigins = [
     'http://localhost:5173',  // Vite dev server
     'http://localhost:3000',  // Alternative dev
-    process.env.FRONTEND_URL  // Production URL
+    'https://byramazan.com',  // Production Domain
+    'https://www.byramazan.com',
+    process.env.FRONTEND_URL  // Env var fallback
 ].filter(Boolean);
 
 app.use(cors({
