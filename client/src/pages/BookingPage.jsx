@@ -558,7 +558,7 @@ const BookingFlow = ({ onBack }) => {
                         </motion.div>
                     )}
 
-                    {rankingStep === 4 && (
+                    {bookingStep === 4 && (
                         <motion.div key="success" className="text-center py-20">
                             <motion.div
                                 initial={{ scale: 0 }} animate={{ scale: 1 }}
