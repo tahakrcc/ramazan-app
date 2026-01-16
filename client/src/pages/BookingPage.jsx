@@ -63,9 +63,9 @@ const LoadingScreen = () => (
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 1, repeat: Infinity, repeatType: "reverse" }}
-            className="text-gold-500 font-serif text-6xl italic"
+            className="text-gold-500 font-serif text-2xl md:text-4xl tracking-[0.3em] font-bold text-center"
         >
-            R
+            BY RAMAZAN
         </motion.div>
     </div>
 );
