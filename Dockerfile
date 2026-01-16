@@ -19,7 +19,7 @@ COPY . .
 
 # Build Client
 WORKDIR /app/client
-RUN npm install
+RUN npm install --include=dev
 RUN npm run build
 WORKDIR /app
 
