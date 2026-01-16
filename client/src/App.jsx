@@ -12,7 +12,11 @@ function App() {
       <div className="min-h-screen bg-neutral-900 text-white">
         <Routes>
           <Route path="/" element={<BookingPage />} />
+<<<<<<< HEAD
           <Route path="/$2a$12$0mpfmkuPmo4iolYNPnlkUu3LhFUkhRW/qQl3Ej.lmgtJFULWY6jbS" element={<AdminLoginPage />} />
+=======
+          <Route path="/gizli-yonetici-girisi" element={<AdminLoginPage />} />
+>>>>>>> 97525636035ae677bfa13e9e835214f9215dde9f
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
         </Routes>
         <ToastContainer theme="dark" position="bottom-right" />

@@ -1,13 +1,9 @@
-require('dns').setDefaultResultOrder('ipv4first');
 require('dotenv').config();
 const http = require('http');
 const app = require('./app');
 const connectDB = require('./config/db');
 const whatsappService = require('./services/whatsapp.service');
-const { initScheduler } = require('./services/scheduler.service'); // Added scheduler
 const logger = require('./config/logger');
-const adminRoutes = require('./routes/admin.routes');
-const appointmentRoutes = require('./routes/appointment.routes');
 
 const server = http.createServer(app);
 
@@ -20,11 +16,6 @@ connectDB().then(() => {
         logger.info(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
 
         // Start WhatsApp Bot
-        whatsappService.client.on('ready', () => {
-            logger.info('WhatsApp Client is ready!');
-            initScheduler(whatsappService.client); // Start scheduler
-        });
-
         whatsappService.initialize();
     });
 });

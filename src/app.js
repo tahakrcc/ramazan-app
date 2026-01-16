@@ -9,6 +9,7 @@ const errorHandler = require('./middlewares/errorHandler');
 
 const app = express();
 
+<<<<<<< HEAD
 // HTTPS Redirect in Production
 if (process.env.NODE_ENV === 'production') {
     app.use((req, res, next) => {
@@ -19,6 +20,11 @@ if (process.env.NODE_ENV === 'production') {
     });
 }
 
+=======
+const mongoSanitize = require('express-mongo-sanitize');
+const xss = require('xss-clean');
+const hpp = require('hpp');
+>>>>>>> 97525636035ae677bfa13e9e835214f9215dde9f
 // Security Middleware
 app.use(helmet({
     contentSecurityPolicy: {
@@ -35,6 +41,15 @@ app.use(helmet({
 
 // Note: MongoDB injection prevention handled via Joi validation in controllers
 // express-mongo-sanitize is incompatible with Express 5.x
+
+// Data Sanitization against NoSQL Query Injection
+app.use(mongoSanitize());
+
+// Data Sanitization against XSS
+app.use(xss());
+
+// Prevent Parameter Pollution
+app.use(hpp());
 
 // CORS Configuration - More restrictive
 const allowedOrigins = [

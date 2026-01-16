@@ -2,15 +2,13 @@ const Appointment = require('../models/appointment.model');
 const logger = require('../config/logger');
 
 // Constants for business hours
-const Settings = require('../models/settings.model');
+const START_HOUR = 8;  // 08:00
+const END_HOUR = 21;   // Last slot is 20:00
 
 // Generate all possible slots for a day
-const generateAllSlots = async () => {
-    let settings = await Settings.findOne();
-    if (!settings) settings = { appointmentStartHour: 8, appointmentEndHour: 20 };
-
+const generateAllSlots = () => {
     const slots = [];
-    for (let i = settings.appointmentStartHour; i < settings.appointmentEndHour; i++) {
+    for (let i = START_HOUR; i < END_HOUR; i++) {
         const hourString = `${i.toString().padStart(2, '0')}:00`;
         slots.push(hourString);
     }
@@ -23,7 +21,7 @@ const generateAllSlots = async () => {
  * @returns {Promise<string[]>}
  */
 const getAvailableSlots = async (date) => {
-    const allSlots = await generateAllSlots();
+    const allSlots = generateAllSlots();
 
     const bookedAppointments = await Appointment.find({
         date: date,
@@ -45,18 +43,6 @@ const createAppointment = async (data) => {
     const appointmentDateTime = new Date(`${data.date}T${data.hour}`);
     if (appointmentDateTime < new Date()) {
         throw new Error('Geçmiş zamana randevu alınamaz.');
-    }
-
-    // EXPLICIT CHECK: Prevent double booking regardless of DB Index
-    const existing = await Appointment.findOne({
-        date: data.date,
-        hour: data.hour,
-        status: 'confirmed'
-    });
-
-    if (existing) {
-        logger.warn(`Double Booking Attempt Blocked: ${data.date} ${data.hour}`);
-        throw new Error('Bu saat maalesef az önce doldu. Lütfen başka bir saat seçin.');
     }
 
     try {
@@ -138,6 +124,7 @@ const getCustomerHistory = async (phone) => {
     return appointments;
 };
 
+<<<<<<< HEAD
 const deleteAppointment = async (id) => {
     const result = await Appointment.findByIdAndDelete(id);
     if (!result) {
@@ -171,13 +158,19 @@ const cleanupOldAppointments = async () => {
     return result;
 };
 
+=======
+>>>>>>> 97525636035ae677bfa13e9e835214f9215dde9f
 module.exports = {
     getAvailableSlots,
     createAppointment,
     getMyAppointment,
     cancelAppointment,
-    deleteAppointment,
     getCustomerHistory,
+<<<<<<< HEAD
     getDailyAppointments,
     cleanupOldAppointments
+=======
+    START_HOUR,
+    END_HOUR
+>>>>>>> 97525636035ae677bfa13e9e835214f9215dde9f
 };

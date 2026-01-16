@@ -21,16 +21,6 @@ const adminSchema = new mongoose.Schema({
     timestamps: true
 });
 
-// Virtual for password
-adminSchema.virtual('password')
-    .set(function (password) {
-        this._password = password;
-        this.passwordHash = bcrypt.hashSync(password, 10);
-    })
-    .get(function () {
-        return this._password;
-    });
-
 // Method to compare password
 adminSchema.methods.comparePassword = async function (candidatePassword) {
     return bcrypt.compare(candidatePassword, this.passwordHash);
