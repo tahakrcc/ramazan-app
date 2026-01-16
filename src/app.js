@@ -1,13 +1,40 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+// Note: express-mongo-sanitize removed - incompatible with Express 5.x
+// MongoDB injection prevention handled via Joi validation in controllers
 const routes = require('./routes');
 const errorHandler = require('./middlewares/errorHandler');
 
 const app = express();
 
+// HTTPS Redirect in Production
+if (process.env.NODE_ENV === 'production') {
+    app.use((req, res, next) => {
+        if (req.header('x-forwarded-proto') !== 'https') {
+            return res.redirect(`https://${req.header('host')}${req.url}`);
+        }
+        next();
+    });
+}
+
 // Security Middleware
-app.use(helmet());
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+            fontSrc: ["'self'", "https://fonts.gstatic.com"],
+            imgSrc: ["'self'", "data:", "https:"],
+            scriptSrc: ["'self'"],
+        },
+    },
+    crossOriginEmbedderPolicy: false,
+}));
+
+// Note: MongoDB injection prevention handled via Joi validation in controllers
+// express-mongo-sanitize is incompatible with Express 5.x
 
 // CORS Configuration - More restrictive
 const allowedOrigins = [
@@ -33,7 +60,17 @@ app.use(cors({
 // Body Parser with size limit
 app.use(express.json({ limit: '10kb' }));
 
+// Rate Limiting for API
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per windowMs
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Çok fazla istek, lütfen 15 dakika sonra tekrar deneyin.' }
+});
+
 // Routes
+app.use('/api', apiLimiter);
 app.use('/api', routes);
 
 // Health check endpoint

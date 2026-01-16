@@ -35,8 +35,44 @@ const getAvailable = async (req, res, next) => {
     }
 };
 
+// In-memory rate limit store (IP -> { count, firstRequest })
+const rateLimitStore = new Map();
+const RATE_LIMIT_WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours
+const MAX_APPOINTMENTS_PER_WINDOW = 2;
+
+// Cleanup old entries every 30 minutes
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, data] of rateLimitStore.entries()) {
+        if (now - data.firstRequest > RATE_LIMIT_WINDOW_MS) {
+            rateLimitStore.delete(ip);
+        }
+    }
+}, 30 * 60 * 1000);
+
 const create = async (req, res, next) => {
     try {
+        // Rate Limiting Check
+        const clientIP = req.ip || req.connection.remoteAddress || 'unknown';
+        const now = Date.now();
+
+        if (rateLimitStore.has(clientIP)) {
+            const data = rateLimitStore.get(clientIP);
+            if (now - data.firstRequest < RATE_LIMIT_WINDOW_MS) {
+                if (data.count >= MAX_APPOINTMENTS_PER_WINDOW) {
+                    return res.status(429).json({
+                        error: '2 saat içinde en fazla 2 randevu alabilirsiniz. Lütfen daha sonra tekrar deneyin.'
+                    });
+                }
+                data.count++;
+            } else {
+                // Reset window
+                rateLimitStore.set(clientIP, { count: 1, firstRequest: now });
+            }
+        } else {
+            rateLimitStore.set(clientIP, { count: 1, firstRequest: now });
+        }
+
         // 1. Validate Input
         const { error, value } = createSchema.validate(req.body);
         if (error) {

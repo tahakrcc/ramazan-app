@@ -72,6 +72,17 @@ const createAppointment = async (data) => {
 
         const savedAppointment = await appointment.save();
         logger.info(`Appointment created: ${savedAppointment._id} for ${data.phone}`);
+
+        // Send WhatsApp Notification
+        try {
+            const whatsappService = require('./whatsapp.service');
+            const chatId = `${data.phone.replace('+', '')}@c.us`;
+            const message = `Sayın ${data.customerName},\n${data.date} tarihinde saat ${data.hour} için randevunuz oluşturulmuştur.\nBizi tercih ettiğiniz için teşekkür ederiz.`;
+            whatsappService.sendMessage(chatId, message).catch(err => logger.error('WhatsApp notification failed', err));
+        } catch (waError) {
+            logger.error('WhatsApp service not available or error', waError);
+        }
+
         return savedAppointment;
 
     } catch (error) {
@@ -144,6 +155,22 @@ const getDailyAppointments = async (date) => {
     return appointments;
 };
 
+const cleanupOldAppointments = async () => {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const dateStr = sevenDaysAgo.toISOString().split('T')[0];
+
+    // Delete appointments older than 7 days
+    const result = await Appointment.deleteMany({
+        date: { $lt: dateStr }
+    });
+
+    if (result.deletedCount > 0) {
+        logger.info(`Cleaned up ${result.deletedCount} old appointments.`);
+    }
+    return result;
+};
+
 module.exports = {
     getAvailableSlots,
     createAppointment,
@@ -151,5 +178,6 @@ module.exports = {
     cancelAppointment,
     deleteAppointment,
     getCustomerHistory,
-    getDailyAppointments
+    getDailyAppointments,
+    cleanupOldAppointments
 };

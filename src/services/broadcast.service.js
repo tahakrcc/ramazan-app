@@ -39,7 +39,7 @@ const sendBroadcast = async (message, filter = 'all') => {
             await sleep(delay);
 
             const chatId = `${phone.replace('+', '')}@c.us`;
-            await whatsappService.client.sendMessage(chatId, message);
+            await whatsappService.sendMessage(chatId, message);
             successCount++;
         } catch (error) {
             logger.error(`Failed to send broadcast to ${phone}`, error);

@@ -38,6 +38,8 @@ const updateSettings = async (req, res, next) => {
         settings.appointmentStartHour = appointmentStartHour;
         settings.appointmentEndHour = appointmentEndHour;
         settings.bookingRangeDays = bookingRangeDays;
+        settings.businessAddress = req.body.businessAddress;
+        settings.businessMapsLink = req.body.businessMapsLink;
 
         await settings.save();
         res.json(settings);

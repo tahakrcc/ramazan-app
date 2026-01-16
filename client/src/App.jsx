@@ -12,7 +12,7 @@ function App() {
       <div className="min-h-screen bg-neutral-900 text-white">
         <Routes>
           <Route path="/" element={<BookingPage />} />
-          <Route path="/admin/login" element={<AdminLoginPage />} />
+          <Route path="/$2a$12$0mpfmkuPmo4iolYNPnlkUu3LhFUkhRW/qQl3Ej.lmgtJFULWY6jbS" element={<AdminLoginPage />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
         </Routes>
         <ToastContainer theme="dark" position="bottom-right" />

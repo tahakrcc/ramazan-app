@@ -48,7 +48,7 @@ const startReminderJob = () => {
                     // Better message without relying on exported CONFIG if it's not available:
                     // Or we can import Settings here.
 
-                    await whatsappService.client.sendMessage(chatId, message);
+                    await whatsappService.sendMessage(chatId, message);
                     logger.info(`Reminder sent to ${phone}`);
                 } catch (err) {
                     logger.error(`Failed to send reminder to ${appt.phone}`, err);

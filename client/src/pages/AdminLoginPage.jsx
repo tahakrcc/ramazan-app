@@ -15,7 +15,7 @@ const AdminLoginPage = () => {
 
         try {
             const res = await API.post('/admin/login', formData);
-            localStorage.setItem('adminToken', res.data.token);
+            localStorage.setItem('token', res.data.token);
             toast.success('Giriş başarılı');
             navigate('/admin/dashboard');
         } catch (error) {

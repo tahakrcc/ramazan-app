@@ -1,5 +1,6 @@
 const Admin = require('../models/admin.model');
 const Appointment = require('../models/appointment.model');
+const appointmentService = require('../services/appointment.service'); // Added import
 const broadcastService = require('../services/broadcast.service'); // Added import
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
@@ -7,7 +8,7 @@ const logger = require('../config/logger');
 
 const generateToken = (id, role) => {
     return jwt.sign({ id, role }, process.env.JWT_SECRET, {
-        expiresIn: '30d',
+        expiresIn: '12h',
     });
 };
 
@@ -38,13 +39,36 @@ const login = async (req, res, next) => {
 
 const getAppointments = async (req, res, next) => {
     try {
-        const { date, startDate, endDate } = req.query;
-        // Only show confirmed appointments (not cancelled)
-        const query = { status: 'confirmed' };
-        if (date) {
-            query.date = date;
-        } else if (startDate && endDate) {
-            query.date = { $gte: startDate, $lte: endDate };
+        // Trigger cleanup (fire & forget)
+        appointmentService.cleanupOldAppointments().catch(err => logger.error('Cleanup failed', err));
+
+        const { date, startDate, endDate, view } = req.query;
+        let query = {};
+
+        const today = new Date().toISOString().split('T')[0];
+
+        if (view === 'archive') {
+            // Archive: Cancelled OR Past dates
+            query = {
+                $or: [
+                    { status: 'cancelled' },
+                    { date: { $lt: today } }
+                ]
+            };
+        } else {
+            // Active: NOT cancelled
+            query = { status: { $ne: 'cancelled' } };
+
+            if (startDate && endDate) {
+                // Calendar View or specific range
+                query.date = { $gte: startDate, $lte: endDate };
+            } else if (date) {
+                // Specific date
+                query.date = date;
+            } else {
+                // Default List View: Today onwards
+                query.date = { $gte: today };
+            }
         }
 
         const appointments = await Appointment.find(query).sort({ date: 1, hour: 1 });

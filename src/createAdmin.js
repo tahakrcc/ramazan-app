@@ -7,8 +7,8 @@ const createAdmin = async () => {
     try {
         await connectDB();
 
-        const username = 'admin';
-        const password = 'admin123';
+        const username = 'Ramazan';
+        const password = 'Tk01.ramazan';
 
         // Check if admin exists
         const existingAdmin = await Admin.findOne({ username });

@@ -1,8 +1,22 @@
 const winston = require('winston');
 
+// Sensitive data filter - masks passwords, tokens, secrets
+const sensitiveFilter = winston.format((info) => {
+    if (typeof info.message === 'string') {
+        // Mask common sensitive patterns
+        info.message = info.message
+            .replace(/password['":\s]*['"]?[^'",\s}]+['"]?/gi, 'password: [REDACTED]')
+            .replace(/token['":\s]*['"]?[^'",\s}]+['"]?/gi, 'token: [REDACTED]')
+            .replace(/secret['":\s]*['"]?[^'",\s}]+['"]?/gi, 'secret: [REDACTED]')
+            .replace(/authorization['":\s]*['"]?Bearer\s+[^'",\s}]+['"]?/gi, 'Authorization: [REDACTED]');
+    }
+    return info;
+});
+
 const logger = winston.createLogger({
     level: 'info',
     format: winston.format.combine(
+        sensitiveFilter(),
         winston.format.timestamp(),
         winston.format.json()
     ),
@@ -23,3 +37,4 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 module.exports = logger;
+

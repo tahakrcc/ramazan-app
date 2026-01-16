@@ -7,17 +7,26 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: '#ffffff',
-        secondary: '#1e293b',
-        accent: '#3b82f6',
-        'accent-dark': '#2563eb',
-        'accent-light': '#60a5fa',
-        surface: '#f8fafc',
-        'surface-dark': '#e2e8f0',
+        gold: {
+          400: '#E6C86E',
+          500: '#D4AF37', // Classic Gold
+          600: '#AA8C2C',
+        },
+        dark: {
+          800: '#232323',
+          900: '#1a1a1a', // Deep Black/Gray
+          950: '#121212',
+        },
+        primary: '#D4AF37', // Gold as primary
+        secondary: '#1a1a1a', // Dark as secondary
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Outfit', 'sans-serif'],
+        serif: ['Playfair Display', 'serif'],
       },
+      backgroundImage: {
+        'luxury-pattern': "url('https://www.transparenttextures.com/patterns/cubes.png')", // Optional subtle texture
+      }
     },
   },
   plugins: [],
