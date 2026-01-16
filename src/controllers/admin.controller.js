@@ -1,10 +1,7 @@
 const Admin = require('../models/admin.model');
 const Appointment = require('../models/appointment.model');
-<<<<<<< HEAD
 const appointmentService = require('../services/appointment.service'); // Added import
 const broadcastService = require('../services/broadcast.service'); // Added import
-=======
->>>>>>> 97525636035ae677bfa13e9e835214f9215dde9f
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const logger = require('../config/logger');
@@ -42,7 +39,6 @@ const login = async (req, res, next) => {
 
 const getAppointments = async (req, res, next) => {
     try {
-<<<<<<< HEAD
         // Trigger cleanup (fire & forget)
         appointmentService.cleanupOldAppointments().catch(err => logger.error('Cleanup failed', err));
 
@@ -74,12 +70,7 @@ const getAppointments = async (req, res, next) => {
                 query.date = { $gte: today };
             }
         }
-=======
-        const { date } = req.query;
-        // Only show confirmed appointments (not cancelled)
-        const query = { status: 'confirmed' };
-        if (date) query.date = date;
->>>>>>> 97525636035ae677bfa13e9e835214f9215dde9f
+
 
         const appointments = await Appointment.find(query).sort({ date: 1, hour: 1 });
         res.json(appointments);

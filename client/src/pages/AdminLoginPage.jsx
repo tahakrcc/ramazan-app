@@ -14,13 +14,8 @@ const AdminLoginPage = () => {
         setLoading(true);
 
         try {
-<<<<<<< HEAD
             const res = await API.post('/admin/login', formData);
             localStorage.setItem('token', res.data.token);
-=======
-            const res = await API.post('/admin/secure-login-action', formData);
-            localStorage.setItem('adminToken', res.data.token);
->>>>>>> 97525636035ae677bfa13e9e835214f9215dde9f
             toast.success('Giriş başarılı');
             navigate('/admin/dashboard');
         } catch (error) {

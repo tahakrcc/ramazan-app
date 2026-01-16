@@ -124,7 +124,6 @@ const getCustomerHistory = async (phone) => {
     return appointments;
 };
 
-<<<<<<< HEAD
 const deleteAppointment = async (id) => {
     const result = await Appointment.findByIdAndDelete(id);
     if (!result) {
@@ -157,20 +156,14 @@ const cleanupOldAppointments = async () => {
     }
     return result;
 };
-
-=======
->>>>>>> 97525636035ae677bfa13e9e835214f9215dde9f
 module.exports = {
     getAvailableSlots,
     createAppointment,
     getMyAppointment,
     cancelAppointment,
     getCustomerHistory,
-<<<<<<< HEAD
     getDailyAppointments,
-    cleanupOldAppointments
-=======
+    cleanupOldAppointments,
     START_HOUR,
     END_HOUR
->>>>>>> 97525636035ae677bfa13e9e835214f9215dde9f
 };

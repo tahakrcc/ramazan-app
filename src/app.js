@@ -9,7 +9,6 @@ const errorHandler = require('./middlewares/errorHandler');
 
 const app = express();
 
-<<<<<<< HEAD
 // HTTPS Redirect in Production
 if (process.env.NODE_ENV === 'production') {
     app.use((req, res, next) => {
@@ -20,11 +19,9 @@ if (process.env.NODE_ENV === 'production') {
     });
 }
 
-=======
 const mongoSanitize = require('express-mongo-sanitize');
 const xss = require('xss-clean');
 const hpp = require('hpp');
->>>>>>> 97525636035ae677bfa13e9e835214f9215dde9f
 // Security Middleware
 app.use(helmet({
     contentSecurityPolicy: {
