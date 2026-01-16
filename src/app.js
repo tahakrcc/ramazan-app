@@ -20,7 +20,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // const mongoSanitize = require('express-mongo-sanitize');
-const xss = require('xss-clean');
+// const xss = require('xss-clean');
 const hpp = require('hpp');
 // Security Middleware
 app.use(helmet({
@@ -43,7 +43,7 @@ app.use(helmet({
 // app.use(mongoSanitize()); // Removed due to Express 5.x incompatibility
 
 // Data Sanitization against XSS
-app.use(xss());
+// app.use(xss()); // Removed causing 'Cannot set property query' error
 
 // Prevent Parameter Pollution
 app.use(hpp());

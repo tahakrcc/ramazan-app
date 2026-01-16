@@ -5,19 +5,12 @@ WORKDIR /app
 # Install system dependencies for Puppeteer (WhatsApp Web)
 # Note: google-chrome-stable is large, but necessary for reliable rendering
 RUN apk add --no-cache \
-    chromium \
-    nss \
-    freetype \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont \
     nodejs \
     yarn \
     git
 
-# Tell Puppeteer to skip installing Chrome. We'll be using the installed package.
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+# Optimized for pure API usage
+ENV NODE_ENV=production
 
 COPY package*.json ./
 RUN npm install

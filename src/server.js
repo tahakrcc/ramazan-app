@@ -12,30 +12,15 @@ const PORT = process.env.PORT || 5000;
 // Connect to Database
 connectDB().then(() => {
     // Start Server
+    // Start Server
     server.listen(PORT, () => {
         logger.info(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
-
-        // Start WhatsApp Bot
-        whatsappService.initialize();
     });
 });
 
-// QR Code Endpoint for Browser
+// QR Code handling moved to Microservice
 app.get('/qrcode', (req, res) => {
-    const qr = whatsappService.getQR();
-    if (qr === 'READY') {
-        res.send('<h1>WhatsApp Bağlı! ✅</h1>');
-    } else if (qr) {
-        res.send(`
-            <div style="text-align:center; padding-top: 50px;">
-                <h1>WhatsApp Giriş</h1>
-                <p>Terminale bakmak yerine bu kodu taratabilirsiniz:</p>
-                <img src="${qr}" style="width:300px; height:300px; border: 1px solid #ccc; padding: 10px;" />
-            </div>
-        `);
-    } else {
-        res.send('<h1>QR Kod oluşturuluyor, lütfen sayfayı yenileyin... ⏳</h1>');
-    }
+    res.redirect(`${process.env.VITE_WP_SERVICE_URL || 'https://ramazan-whatsapp.onrender.com'}/qrcode`);
 });
 
 
