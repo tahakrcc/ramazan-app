@@ -19,7 +19,7 @@ if (process.env.NODE_ENV === 'production') {
     });
 }
 
-const mongoSanitize = require('express-mongo-sanitize');
+// const mongoSanitize = require('express-mongo-sanitize');
 const xss = require('xss-clean');
 const hpp = require('hpp');
 // Security Middleware
@@ -40,7 +40,7 @@ app.use(helmet({
 // express-mongo-sanitize is incompatible with Express 5.x
 
 // Data Sanitization against NoSQL Query Injection
-app.use(mongoSanitize());
+// app.use(mongoSanitize()); // Removed due to Express 5.x incompatibility
 
 // Data Sanitization against XSS
 app.use(xss());
