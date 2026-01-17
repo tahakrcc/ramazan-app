@@ -85,56 +85,22 @@ const WhatsAppConnection = () => {
                     ⏳ Bağlanıyor...
                 </div>
             )}
-            {status === 'QR_READY' && !pairingCode && (
-                <div className="text-center w-full max-w-sm mx-auto">
-                    <p className="text-sm font-bold text-gray-900 mb-4">Telefon Numarası ile Bağla</p>
-                    <div className="flex gap-2">
-                        <input
-                            type="text"
-                            placeholder="905xxxxxxxxx"
-                            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white text-gray-900 placeholder-gray-500 font-medium"
-                            value={phone}
-                            onChange={e => setPhone(e.target.value)}
+            {status === 'QR_READY' && qr && (
+                <div className="text-center w-full max-w-sm mx-auto flex flex-col items-center animate-in fade-in zoom-in duration-300">
+                    <p className="text-sm font-bold text-gray-900 mb-4">WhatsApp ile Bağla (QR Kod)</p>
+                    <div className="bg-white p-2 rounded-xl border border-gray-200 shadow-sm">
+                        <img
+                            src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(qr)}`}
+                            alt="WhatsApp QR Code"
+                            className="w-52 h-52 object-contain"
                         />
-                        <button
-                            onClick={async () => {
-                                if (!phone) return;
-                                setPairingLoading(true);
-                                try {
-                                    const data = await wpFetch('/pair', {
-                                        method: 'POST',
-                                        body: JSON.stringify({ phone })
-                                    });
-                                    if (data.code) {
-                                        setPairingCode(data.code);
-                                    } else {
-                                        alert('Kod alınamadı: ' + (data.error || 'Bilinmeyen hata'));
-                                    }
-                                } catch (err) {
-                                    console.error('Pairing error full:', err);
-                                    alert('Kod alınamadı: ' + err.message);
-                                } finally {
-                                    setPairingLoading(false);
-                                }
-                            }}
-                            disabled={pairingLoading}
-                            className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-gray-800"
-                        >
-                            {pairingLoading ? '...' : 'Kod Al'}
-                        </button>
                     </div>
-                    <p className="text-xs text-gray-600 mt-2 text-left font-medium">Başında + olmadan yazınız (Örn: 905321234567)</p>
-                </div>
-            )}
-
-            {status === 'QR_READY' && pairingCode && (
-                <div className="text-center animate-in fade-in zoom-in duration-300">
-                    <p className="text-gray-600 mb-4">WhatsApp &gt; Bağlı Cihazlar &gt; Cihaz Bağla &gt; Telefon Numarası ile Bağla</p>
-                    <div className="text-4xl font-bold tracking-widest text-gray-900 bg-gray-100 p-4 rounded-xl border border-dashed border-gray-300 select-all">
-                        {pairingCode}
+                    <p className="text-xs text-gray-600 mt-4 font-medium max-w-xs">
+                        Telefonunuzdan WhatsApp &gt; Bağlı Cihazlar &gt; Cihaz Bağla diyerek bu kodu okutunuz.
+                    </p>
+                    <div className="mt-4 text-[10px] text-gray-400">
+                        Kod yenileniyor... (Her 15-20 saniyede bir değişebilir)
                     </div>
-                    <p className="text-xs text-orange-600 mt-4 font-medium">Bu kodu telefonunuza giriniz.</p>
-                    <button onClick={() => setPairingCode(null)} className="mt-4 text-sm text-gray-500 underline">Geri Dön</button>
                 </div>
             )}
 
