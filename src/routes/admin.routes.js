@@ -207,4 +207,37 @@ router.get('/stats', async (req, res, next) => {
     }
 });
 
+// =============== SETTINGS ===============
+router.get('/settings', async (req, res, next) => {
+    try {
+        const Settings = require('../models/settings.model');
+        const settings = await Settings.getSettings();
+        res.json(settings);
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.put('/settings', async (req, res, next) => {
+    try {
+        const Settings = require('../models/settings.model');
+        const { appointmentStartHour, appointmentEndHour, bookingRangeDays, businessAddress, businessMapsLink } = req.body;
+
+        let settings = await Settings.findOne();
+        if (!settings) settings = await Settings.create({});
+
+        if (appointmentStartHour !== undefined) settings.appointmentStartHour = appointmentStartHour;
+        if (appointmentEndHour !== undefined) settings.appointmentEndHour = appointmentEndHour;
+        if (bookingRangeDays !== undefined) settings.bookingRangeDays = bookingRangeDays;
+        if (businessAddress !== undefined) settings.businessAddress = businessAddress;
+        if (businessMapsLink !== undefined) settings.businessMapsLink = businessMapsLink;
+
+        await settings.save();
+        logger.info('Admin updated settings');
+        res.json(settings);
+    } catch (error) {
+        next(error);
+    }
+});
+
 module.exports = router;
