@@ -9,6 +9,9 @@ const errorHandler = require('./middlewares/errorHandler');
 
 const app = express();
 
+// Enable trust proxy for Render/Heroku (Required for Rate Limiting)
+app.set('trust proxy', 1);
+
 // HTTPS Redirect in Production
 if (process.env.NODE_ENV === 'production') {
     app.use((req, res, next) => {
