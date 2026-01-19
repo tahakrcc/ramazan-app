@@ -1,10 +1,9 @@
-const { default: makeWASocket, DisconnectReason, useMultiFileAuthState } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, DisconnectReason } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode');
 const logger = require('../config/logger');
-const fs = require('fs');
-const path = require('path');
 const BotState = require('../models/botState.model');
 const Feedback = require('../models/feedback.model');
+const useMongoDBAuthState = require('../utils/mongoAuthState');
 
 const CONFIG = {
     businessName: 'By Ramazan',
@@ -22,7 +21,7 @@ let status = 'INITIALIZING';
 
 const initialize = async () => {
     try {
-        const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
+        const { state, saveCreds } = await useMongoDBAuthState();
 
         sock = makeWASocket({
             printQRInTerminal: true,
@@ -160,7 +159,10 @@ const logout = async () => {
         }
         status = 'INITIALIZING';
         qrCode = null;
-        try { fs.rmSync('auth_info_baileys', { recursive: true, force: true }); } catch (e) { }
+        try {
+            // Optional: Clear DB session if strictly required, but sock.logout() usually invalidates it.
+            // keeping it simple for now or we can implement a clear function in mongoAuthState
+        } catch (e) { }
         initialize();
         return true;
     } catch (error) { return false; }
