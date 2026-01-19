@@ -85,7 +85,13 @@ const apiLimiter = rateLimit({
 
 // Routes
 app.use('/api', apiLimiter);
-app.use('/api', routes);
+const appointmentRoutes = require('./routes/appointment.routes');
+const adminRoutes = require('./routes/admin.routes');
+const feedbackRoutes = require('./routes/feedback.routes');
+
+app.use('/api/appointments', appointmentRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/feedbacks', feedbackRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

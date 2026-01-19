@@ -11,11 +11,7 @@ const CONFIG = {
     businessName: 'By Ramazan',
     tagline: 'GENTLEMEN\'S\nGROOMING',
     workingHours: { start: 8, end: 20 },
-    services: [
-        { id: 'sac', name: 'Saç Kesimi', price: 500, duration: '45dk' },
-        { id: 'sakal', name: 'Sakal Tıraşı', price: 300, duration: '30dk' },
-        { id: 'sac_sakal', name: 'Komple Bakım', price: 600, duration: '1sa 15dk' }
-    ],
+    // services: removed hardcoded
     location: {
         address: 'Movenpick Hotel -1 Kat',
         city: 'Malatya',
@@ -27,10 +23,32 @@ const CONFIG = {
 const BookingPage = () => {
     const [step, setStep] = useState(0); // 0: Landing, 1: Booking Flow
     const [isLoading, setIsLoading] = useState(true);
+    const [services, setServices] = useState([]);
+    const [feedbacks, setFeedbacks] = useState([]);
 
-    // Initial Load Animation
+    // Initial Load Animation & Fetch Services & Feedbacks
     useEffect(() => {
-        setTimeout(() => setIsLoading(false), 2000);
+        const loadData = async () => {
+            try {
+                const [servicesRes, feedbacksRes] = await Promise.all([
+                    API.get('/appointments/services'),
+                    API.get('/feedbacks/approved')
+                ]);
+                setServices(servicesRes.data);
+                setFeedbacks(feedbacksRes.data);
+            } catch (error) {
+                console.error('Failed to load data', error);
+                // Fallback if API fails
+                setServices([
+                    { id: 'sac', name: 'Saç Kesimi', price: 500, duration: 45 },
+                    { id: 'sakal', name: 'Sakal Tıraşı', price: 300, duration: 30 },
+                    { id: 'sac_sakal', name: 'Komple Bakım', price: 600, duration: 75 }
+                ]);
+            } finally {
+                setTimeout(() => setIsLoading(false), 2000);
+            }
+        };
+        loadData();
     }, []);
 
     if (isLoading) return <LoadingScreen />;
@@ -39,14 +57,20 @@ const BookingPage = () => {
         <div className="bg-dark-950 min-h-screen text-white font-sans selection:bg-gold-500 selection:text-dark-950 overflow-x-hidden cursor-none">
             <GrainOverlay />
             <CustomCursor />
-            <WhatsAppButton />
-            <InstagramButton />
+            <AnimatePresence>
+                {step === 0 && (
+                    <>
+                        <WhatsAppButton />
+                        <InstagramButton />
+                    </>
+                )}
+            </AnimatePresence>
             <Nav />
             <AnimatePresence mode="wait">
                 {step === 0 ? (
-                    <LandingView key="landing" onStart={() => setStep(1)} />
+                    <LandingView key="landing" onStart={() => setStep(1)} services={services} feedbacks={feedbacks} />
                 ) : (
-                    <BookingFlow key="booking" onBack={() => setStep(0)} />
+                    <BookingFlow key="booking" onBack={() => setStep(0)} services={services} />
                 )}
             </AnimatePresence>
         </div>
@@ -60,17 +84,26 @@ const BookingPage = () => {
 const LoadingScreen = () => (
     <div className="fixed inset-0 bg-dark-950 flex items-center justify-center z-50">
         <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
+            initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 1, repeat: Infinity, repeatType: "reverse" }}
-            className="text-gold-500 font-serif text-2xl md:text-4xl tracking-[0.3em] font-bold text-center"
+            transition={{ duration: 1.5, repeat: Infinity, repeatType: "reverse" }}
+            className="flex flex-col items-center justify-center gap-6"
         >
-            BY RAMAZAN
+            {/* Logo - Full Visibility */}
+            <div className="relative group">
+                <div className="absolute inset-0 bg-gold-500 blur-3xl opacity-20"></div>
+                <img src="/logo.png" alt="Logo" className="relative w-32 h-32 md:w-40 md:h-40 object-contain drop-shadow-2xl" />
+            </div>
+
+            {/* Foreground Text */}
+            <span className="relative z-10 text-gold-500 font-serif text-3xl md:text-5xl tracking-[0.3em] font-bold text-center drop-shadow-lg">
+                BY RAMAZAN
+            </span>
         </motion.div>
     </div>
 );
 
-const LandingView = ({ onStart }) => {
+const LandingView = ({ onStart, services, feedbacks }) => {
     const { scrollYProgress } = useScroll();
     const yHero = useTransform(scrollYProgress, [0, 1], [0, 300]);
     const opacityHero = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
@@ -132,7 +165,11 @@ const LandingView = ({ onStart }) => {
             </section>
 
             {/* Editorial Services */}
-            <ServicesSection />
+            <ServicesSection services={services} />
+
+            {/* Customer Feedbacks */}
+            {feedbacks && feedbacks.length > 0 && <FeedbackSection feedbacks={feedbacks} />}
+
             <AboutSection />
             <ContactSection />
             <Footer />
@@ -140,7 +177,7 @@ const LandingView = ({ onStart }) => {
     );
 };
 
-const ServicesSection = () => (
+const ServicesSection = ({ services }) => (
     <section id="hizmetler" className="py-32 px-6 md:px-20 border-t border-white/5 bg-dark-900 relative">
         <div className="max-w-7xl mx-auto">
             <div className="flex flex-col md:flex-row justify-between items-end mb-20 gap-8">
@@ -152,7 +189,7 @@ const ServicesSection = () => (
             </div>
 
             <div className="grid grid-cols-1 gap-px bg-white/10 border border-white/10">
-                {CONFIG.services.map((service, index) => (
+                {services.map((service, index) => (
                     <motion.div
                         key={service.id}
                         initial={{ opacity: 0, y: 20 }}
@@ -164,7 +201,7 @@ const ServicesSection = () => (
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10">
                             <div>
                                 <h3 className="text-3xl font-serif mb-2 text-white group-hover:text-gold-500 transition-colors">{service.name}</h3>
-                                <p className="text-gray-300 text-sm tracking-widest uppercase">{service.duration} • Premium Bakım</p>
+                                <p className="text-gray-300 text-sm tracking-widest uppercase">{service.duration}dk • Premium Bakım</p>
                             </div>
                             <div className="text-4xl font-serif text-gold-500 transition-colors">
                                 {service.price}₺
@@ -177,7 +214,53 @@ const ServicesSection = () => (
     </section>
 );
 
-const BookingFlow = ({ onBack }) => {
+const FeedbackSection = ({ feedbacks }) => {
+    const [currentIndex, setCurrentIndex] = useState(0);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setCurrentIndex(prev => (prev + 1) % feedbacks.length);
+        }, 5000);
+        return () => clearInterval(interval);
+    }, [feedbacks]);
+
+    return (
+        <section className="py-24 bg-dark-900 border-t border-white/5 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-gold-500/20 to-transparent"></div>
+            <div className="max-w-4xl mx-auto px-6 text-center">
+                <h2 className="text-3xl md:text-4xl font-serif text-white mb-16">Müşteri Deneyimleri</h2>
+
+                <div className="relative h-64 md:h-48">
+                    <AnimatePresence mode="wait">
+                        <motion.div
+                            key={currentIndex}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                            className="absolute inset-0 flex flex-col items-center justify-center"
+                        >
+                            <div className="text-gold-500 text-2xl mb-4">{'★'.repeat(feedbacks[currentIndex].rating)}</div>
+                            <p className="text-xl md:text-2xl text-gray-300 font-serif italic mb-6">"{feedbacks[currentIndex].comment}"</p>
+                            <p className="text-sm font-bold text-white uppercase tracking-widest">— {feedbacks[currentIndex].customerName}</p>
+                        </motion.div>
+                    </AnimatePresence>
+                </div>
+
+                <div className="flex justify-center gap-2 mt-8">
+                    {feedbacks.map((_, idx) => (
+                        <button
+                            key={idx}
+                            onClick={() => setCurrentIndex(idx)}
+                            className={`w-2 h-2 rounded-full transition-all ${idx === currentIndex ? 'bg-gold-500 w-6' : 'bg-white/10'}`}
+                        />
+                    ))}
+                </div>
+            </div>
+        </section>
+    );
+};
+
+const BookingFlow = ({ onBack, services }) => {
     // 0: Person Count, 1: Service, 2: Date/Time, 3: Form, 4: Success
     const [bookingStep, setBookingStep] = useState(0);
     const [isDoubleBooking, setIsDoubleBooking] = useState(false);
@@ -250,6 +333,9 @@ const BookingFlow = ({ onBack }) => {
     const submitBooking = async (e) => {
         e.preventDefault();
 
+        // Confirmation Dialog
+        if (!window.confirm('Randevuyu onaylıyor musunuz?')) return;
+
         // Validate
         if (isDoubleBooking && selection.slots.length !== 2) {
             toast.error('Lütfen 2 adet saat seçiniz.');
@@ -287,6 +373,16 @@ const BookingFlow = ({ onBack }) => {
         }
     };
 
+    const BackButton = () => (
+        <button
+            type="button"
+            onClick={() => setBookingStep(bookingStep - 1)}
+            className="w-full mt-6 py-4 border border-white/10 text-gray-400 hover:text-white hover:border-white/30 rounded-sm uppercase tracking-widest text-sm transition-all"
+        >
+            ← Geri Dön
+        </button>
+    );
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 100 }}
@@ -297,7 +393,7 @@ const BookingFlow = ({ onBack }) => {
             <div className="p-8 flex justify-between items-center border-b border-white/5">
                 <button
                     onClick={() => bookingStep > 0 ? setBookingStep(bookingStep - 1) : onBack()}
-                    className="text-xs uppercase tracking-widest text-gray-400 hover:text-white transition-colors flex items-center gap-2"
+                    className="text-base font-bold uppercase tracking-widest text-white hover:text-gold-500 transition-colors flex items-center gap-2"
                 >
                     <span>←</span>
                     {bookingStep > 0 ? 'Geri' : 'Ana Menü'}
@@ -342,7 +438,7 @@ const BookingFlow = ({ onBack }) => {
                         <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                             <h2 className="text-4xl md:text-5xl font-serif mb-12 text-center text-white">Hizmet Seçimi</h2>
                             <div className="grid gap-4">
-                                {CONFIG.services.map(s => (
+                                {services.map(s => (
                                     <button
                                         key={s.id}
                                         onClick={() => handleServiceSelect(s)}
@@ -355,6 +451,7 @@ const BookingFlow = ({ onBack }) => {
                                     </button>
                                 ))}
                             </div>
+                            <BackButton />
                         </motion.div>
                     )}
 
@@ -369,7 +466,7 @@ const BookingFlow = ({ onBack }) => {
                             {/* Date Scroller */}
                             <div className="relative">
                                 {/* Scroll Hint for Mobile */}
-                                <div className="md:hidden absolute -top-6 right-0 text-gray-400 text-[10px] animate-bounce flex items-center gap-1">
+                                <div className="md:hidden absolute -top-8 right-0 text-white font-bold text-sm animate-bounce flex items-center gap-1">
                                     Kaydır <span className="text-gold-500">→</span>
                                 </div>
 
@@ -437,7 +534,7 @@ const BookingFlow = ({ onBack }) => {
                                             >
                                                 {t}
                                                 {isSelected && isDoubleBooking && (
-                                                    <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full text-[10px] flex items-center justify-center bg-dark-950 text-white font-bold border border-white/20">
+                                                    <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full text-[10px] flex items-center justify-center bg-dark-900 text-white font-bold border border-white/20">
                                                         {index + 1}
                                                     </span>
                                                 )}
@@ -459,6 +556,7 @@ const BookingFlow = ({ onBack }) => {
                                 </div>
                             )}
 
+                            <BackButton />
                         </motion.div>
                     )}
 
@@ -555,6 +653,7 @@ const BookingFlow = ({ onBack }) => {
                                     </button>
                                 </div>
                             </form>
+                            <BackButton />
                         </motion.div>
                     )}
 
@@ -638,7 +737,10 @@ const Footer = () => (
 const Nav = () => {
     return (
         <nav className="fixed top-0 left-0 right-0 p-6 md:p-8 flex justify-between items-center z-40 bg-gradient-to-b from-dark-950/80 to-transparent backdrop-blur-sm md:bg-none md:backdrop-blur-none transition-all duration-300">
-            <span className="font-serif text-xl tracking-widest text-white mix-blend-difference z-50 relative">BY RAMAZAN</span>
+            <div className="z-50 relative flex items-center gap-4">
+                <img src="/logo.png" alt="Logo" className="w-20 h-20 object-contain drop-shadow-lg" />
+                <span className="font-serif text-xl tracking-widest text-white mix-blend-difference">BY RAMAZAN</span>
+            </div>
 
             {/* Desktop Nav */}
             <div className="hidden md:flex gap-8 text-xs uppercase tracking-widest text-white mix-blend-difference">

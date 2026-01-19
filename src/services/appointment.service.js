@@ -1,14 +1,22 @@
 const Appointment = require('../models/appointment.model');
+const Settings = require('../models/settings.model');
+const ClosedDate = require('../models/closedDate.model');
 const logger = require('../config/logger');
 
-// Constants for business hours
-const START_HOUR = 8;  // 08:00
-const END_HOUR = 21;   // Last slot is 20:00
+// Helper to get business hours (cached or fresh)
+const getBusinessHours = async () => {
+    const settings = await Settings.getSettings();
+    return {
+        start: settings.appointmentStartHour || 8,
+        end: settings.appointmentEndHour || 21
+        // Note: end is exclusive in loop usually, or inclusive? 
+        // Original code: i < END_HOUR. If END=21, last slot is 20:00. Settings usually imply "Closing Time".
+    };
+};
 
-// Generate all possible slots for a day
-const generateAllSlots = () => {
+const generateSlots = (start, end) => {
     const slots = [];
-    for (let i = START_HOUR; i < END_HOUR; i++) {
+    for (let i = start; i < end; i++) {
         const hourString = `${i.toString().padStart(2, '0')}:00`;
         slots.push(hourString);
     }
@@ -21,7 +29,15 @@ const generateAllSlots = () => {
  * @returns {Promise<string[]>}
  */
 const getAvailableSlots = async (date) => {
-    const allSlots = generateAllSlots();
+    // 1. Check if Closed Date
+    const isClosed = await ClosedDate.findOne({ date });
+    if (isClosed) {
+        return []; // No slots available on holidays
+    }
+
+    // 2. Get Settings
+    const { start, end } = await getBusinessHours();
+    const allSlots = generateSlots(start, end);
 
     const bookedAppointments = await Appointment.find({
         date: date,
@@ -45,6 +61,12 @@ const createAppointment = async (data) => {
         throw new Error('Geçmiş zamana randevu alınamaz.');
     }
 
+    // Check Closed Date
+    const isClosed = await ClosedDate.findOne({ date: data.date });
+    if (isClosed) {
+        throw new Error(`Seçilen tarih (${data.date}) işletmemiz kapalıdır: ${isClosed.reason}`);
+    }
+
     try {
         const appointment = new Appointment({
             customerName: data.customerName,
@@ -62,11 +84,11 @@ const createAppointment = async (data) => {
         // Send WhatsApp Notification
         try {
             const whatsappService = require('./whatsapp.service');
-            const chatId = `${data.phone.replace('+', '')}@c.us`;
             const message = `Sayın ${data.customerName},\n${data.date} tarihinde saat ${data.hour} için randevunuz oluşturulmuştur.\nBizi tercih ettiğiniz için teşekkür ederiz.`;
-            whatsappService.sendMessage(chatId, message).catch(err => logger.error('WhatsApp notification failed', err));
+            // Use clean phone, let service handle formatting
+            await whatsappService.sendMessage(data.phone, message);
         } catch (waError) {
-            logger.error('WhatsApp service not available or error', waError);
+            logger.error('WhatsApp notification failed', waError);
         }
 
         return savedAppointment;
@@ -156,6 +178,7 @@ const cleanupOldAppointments = async () => {
     }
     return result;
 };
+
 module.exports = {
     getAvailableSlots,
     createAppointment,
@@ -163,7 +186,5 @@ module.exports = {
     cancelAppointment,
     getCustomerHistory,
     getDailyAppointments,
-    cleanupOldAppointments,
-    START_HOUR,
-    END_HOUR
+    cleanupOldAppointments
 };

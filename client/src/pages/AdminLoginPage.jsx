@@ -28,9 +28,16 @@ const AdminLoginPage = () => {
     return (
         <div className="min-h-screen bg-gray-900 flex items-center justify-center px-6">
             <div className="w-full max-w-md">
-                <div className="text-center mb-10">
-                    <h1 className="text-3xl font-bold text-white mb-2 font-serif tracking-widest">BY RAMAZAN</h1>
-                    <p className="text-gray-400 text-sm uppercase tracking-wider">Yönetim Paneli</p>
+                <div className="text-center mb-12 flex flex-col items-center justify-center">
+                    {/* Logo - Full Visibility & Glow */}
+                    <div className="relative mb-6 group">
+                        <div className="absolute inset-0 bg-gold-500 blur-2xl opacity-20 group-hover:opacity-30 transition-opacity duration-700"></div>
+                        <img src="/logo.png" alt="Logo" className="relative w-40 h-40 object-contain drop-shadow-2xl" />
+                    </div>
+
+                    {/* Text */}
+                    <h1 className="text-4xl md:text-5xl font-bold text-white mb-2 font-serif tracking-widest drop-shadow-lg">BY RAMAZAN</h1>
+                    <p className="text-gold-500 text-sm uppercase tracking-[0.4em] font-medium">Yönetim Paneli</p>
                 </div>
 
                 <div className="bg-gray-800 rounded-2xl p-8">

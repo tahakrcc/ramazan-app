@@ -4,6 +4,8 @@ const app = require('./app');
 const connectDB = require('./config/db');
 const whatsappService = require('./services/whatsapp.service');
 const logger = require('./config/logger');
+require('./jobs/reminder.job'); // Start Reminder Job
+require('./jobs/feedback_request.job'); // Start Feedback Job
 
 const server = http.createServer(app);
 
@@ -15,12 +17,10 @@ connectDB().then(() => {
     // Start Server
     server.listen(PORT, () => {
         logger.info(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
-    });
-});
 
-// QR Code handling moved to Microservice
-app.get('/qrcode', (req, res) => {
-    res.redirect(`${process.env.VITE_WP_SERVICE_URL || 'https://ramazan-whatsapp.onrender.com'}/qrcode`);
+        // Initialize Local WhatsApp Bot
+        whatsappService.initialize();
+    });
 });
 
 

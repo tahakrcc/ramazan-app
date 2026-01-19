@@ -128,6 +128,45 @@ client.on('disconnected', (reason) => {
     qrCode = null;
 });
 
+// Listener for incoming messages (Feedback System)
+client.on('message', async (msg) => {
+    try {
+        // Ignore status updates or group messages
+        if (msg.from.includes('@g.us') || msg.isStatus) return;
+
+        // Check if message starts with a number 1-5 (Simple heuristic for feedback)
+        // In a real scenario, we would check state from DB, but here we can just forward potential feedbacks
+        // to our main backend to decide.
+
+        // Only forward if it looks like "5 Harika" or just "5"
+        if (/^[1-5]/.test(msg.body.trim())) {
+            console.log(`Potential feedback from ${msg.from}: ${msg.body}`);
+
+            // Send webhook to main app
+            const mainAppUrl = process.env.MAIN_APP_URL || 'http://localhost:5000';
+            const axios = require('axios');
+
+            // Format phone: remove @c.us
+            const phone = msg.from.replace('@c.us', '');
+
+            await axios.post(`${mainAppUrl}/api/feedbacks/bot-hook`, {
+                phone: phone,
+                message: msg.body
+            }, {
+                headers: { 'x-api-key': process.env.API_SECRET_KEY || 'mysecretkey' } // Main app should verify this if needed
+            });
+
+            // If backend accepts it, we can reply "Teşekkürler"
+            // But relying on backend response is better. 
+            // For now, let's reply generically if we want, OR let backend trigger a reply via API
+            msg.reply('Değerli yorumunuz için teşekkür ederiz. 🙏');
+        }
+
+    } catch (error) {
+        console.error('Message listener error:', error.message);
+    }
+});
+
 // ============= API Routes =============
 
 // Health check (UptimeRobot için)

@@ -38,7 +38,7 @@ const WhatsAppConnection = () => {
 
     const fetchStatus = async () => {
         try {
-            const data = await wpFetch('/status');
+            const data = await wpFetch('/whatsapp/status');
             // Harici servis 'ready' döner, ana API 'CONNECTED' döner - normalize et
             const normalizedStatus = data.status === 'ready' ? 'CONNECTED' :
                 data.status === 'qr' ? 'QR_READY' :
@@ -68,7 +68,7 @@ const WhatsAppConnection = () => {
                         onClick={async () => {
                             if (!window.confirm('WhatsApp bağlantısını kesmek istediğinize emin misiniz?')) return;
                             try {
-                                await wpFetch('/logout', { method: 'POST' });
+                                await wpFetch('/whatsapp/logout', { method: 'POST' });
                                 setStatus('INITIALIZING');
                             } catch (e) {
                                 alert('Çıkış yapılamadı');

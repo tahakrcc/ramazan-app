@@ -3,6 +3,7 @@ const router = express.Router();
 const appointmentController = require('../controllers/appointment.controller');
 const rateLimiter = require('../middlewares/rateLimiter');
 
+router.get('/services', appointmentController.getServices);
 router.get('/available', appointmentController.getAvailable);
 router.post('/', rateLimiter.createAppointmentLimiter, appointmentController.create);
 router.get('/my', appointmentController.getMy);

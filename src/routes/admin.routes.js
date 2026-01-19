@@ -240,4 +240,28 @@ router.put('/settings', async (req, res, next) => {
     }
 });
 
+// =============== BROADCAST ===============
+router.post('/broadcast', adminController.sendBroadcast);
+
+// =============== WHATSAPP ===============
+const whatsappService = require('../services/whatsapp.service');
+
+router.get('/whatsapp/status', async (req, res, next) => {
+    try {
+        const status = await whatsappService.getStatus();
+        res.json(status);
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.post('/whatsapp/logout', async (req, res, next) => {
+    try {
+        await whatsappService.logout();
+        res.json({ message: 'WhatsApp bağlantısı kesildi.' });
+    } catch (error) {
+        next(error);
+    }
+});
+
 module.exports = router;

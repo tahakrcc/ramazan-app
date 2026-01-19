@@ -2,6 +2,7 @@ const appointmentService = require('../services/appointment.service');
 const Joi = require('joi');
 
 // Joi Schema for Validation - Updated with service field
+// Joi Schema for Validation - Updated with service field
 const createSchema = Joi.object({
     customerName: Joi.string().min(2).max(100).required(),
     phone: Joi.string().pattern(/^[0-9]{10,11}$/).required().messages({
@@ -13,8 +14,18 @@ const createSchema = Joi.object({
     hour: Joi.string().pattern(/^\d{2}:00$/).required().messages({
         'string.pattern.base': 'Saat formatı: HH:00 olmalı'
     }),
-    service: Joi.string().valid('sac', 'sakal', 'sac_sakal').optional()
+    service: Joi.string().required() // Dynamic service ID validation would be better but string is enough for now
 });
+
+const getServices = async (req, res, next) => {
+    try {
+        const Service = require('../models/service.model');
+        const services = await Service.find({ isActive: true }).sort({ price: 1 });
+        res.json(services);
+    } catch (error) {
+        next(error);
+    }
+};
 
 const getAvailable = async (req, res, next) => {
     try {
@@ -134,5 +145,6 @@ module.exports = {
     getAvailable,
     create,
     getMy,
-    cancel
+    cancel,
+    getServices
 };

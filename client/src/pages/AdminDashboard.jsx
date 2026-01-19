@@ -4,6 +4,8 @@ import { toast } from 'react-toastify';
 import { format, startOfWeek, addDays, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import WhatsAppConnection from '../components/WhatsAppConnection';
+import FeedbackManager from '../components/FeedbackManager';
+import ServicesManager from '../components/ServicesManager';
 import { motion, AnimatePresence } from 'framer-motion';
 import GrainOverlay from '../components/GrainOverlay';
 import { Menu, X, MessageSquare, Plus, QrCode } from 'lucide-react'; // Assumes lucide-react or similar icons
@@ -92,6 +94,8 @@ const AdminDashboard = () => {
                 <nav className="flex-1 overflow-y-auto py-8 px-4 space-y-2">
                     <SidebarItem icon="📊" label="Genel Bakış" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
                     <SidebarItem icon="📅" label="Randevular" active={activeTab === 'appointments'} onClick={() => setActiveTab('appointments')} />
+                    <SidebarItem icon="✂️" label="Hizmetler" active={activeTab === 'services'} onClick={() => setActiveTab('services')} />
+                    <SidebarItem icon="⭐" label="Yorumlar" active={activeTab === 'feedbacks'} onClick={() => setActiveTab('feedbacks')} />
                     <SidebarItem icon="📢" label="Toplu Mesaj" active={activeTab === 'broadcast'} onClick={() => setActiveTab('broadcast')} />
                     <SidebarItem icon="⚙️" label="Ayarlar" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
                 </nav>
@@ -120,6 +124,8 @@ const AdminDashboard = () => {
                         <h2 className="text-2xl font-serif text-white">
                             {activeTab === 'dashboard' && 'Genel Bakış'}
                             {activeTab === 'appointments' && 'Randevu Yönetimi'}
+                            {activeTab === 'services' && 'Hizmet & Fiyat Yönetimi'}
+                            {activeTab === 'feedbacks' && 'Müşteri Yorumları'}
                             {activeTab === 'broadcast' && 'Mesaj Merkezi'}
                             {activeTab === 'settings' && 'Sistem Ayarları'}
                         </h2>
@@ -144,6 +150,8 @@ const AdminDashboard = () => {
                         >
                             {activeTab === 'dashboard' && <DashboardOverview setActiveTab={setActiveTab} />}
                             {activeTab === 'appointments' && <AppointmentsManager />}
+                            {activeTab === 'services' && <ServicesManager />}
+                            {activeTab === 'feedbacks' && <FeedbackManager />}
                             {activeTab === 'broadcast' && <BroadcastManager />}
                             {activeTab === 'settings' && <SettingsManager />}
                         </motion.div>
@@ -394,6 +402,7 @@ const AppointmentsManager = () => {
 
     const handleCreate = async (e) => {
         e.preventDefault();
+        if (!window.confirm('Yeni randevuyu onaylıyor musunuz?')) return;
         try {
             await API.post('/admin/appointments', manualForm);
             toast.success('Randevu oluşturuldu');
@@ -599,11 +608,21 @@ const SettingsManager = () => {
         businessAddress: '',
         businessMapsLink: ''
     });
+    const [closedDates, setClosedDates] = useState([]);
+    const [newClosedDate, setNewClosedDate] = useState({ date: '', reason: '' });
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         fetchSettings();
+        fetchClosedDates();
     }, []);
+
+    const fetchClosedDates = async () => {
+        try {
+            const res = await API.get('/admin/closed-dates');
+            setClosedDates(res.data);
+        } catch (error) { console.error(error); }
+    };
 
     const fetchSettings = async () => {
         try {
@@ -630,6 +649,25 @@ const SettingsManager = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleAddClosedDate = async (e) => {
+        e.preventDefault();
+        try {
+            await API.post('/admin/closed-dates', newClosedDate);
+            toast.success('Tatil günü eklendi');
+            setNewClosedDate({ date: '', reason: '' });
+            fetchClosedDates();
+        } catch (error) { toast.error('Eklenemedi'); }
+    };
+
+    const handleDeleteClosedDate = async (id) => {
+        if (!window.confirm('Silmek istiyor musunuz?')) return;
+        try {
+            await API.delete(`/admin/closed-dates/${id}`);
+            toast.success('Silindi');
+            fetchClosedDates();
+        } catch (error) { toast.error('Silinemedi'); }
     };
 
     return (
@@ -730,8 +768,58 @@ const SettingsManager = () => {
                     </button>
                 </form>
             </div>
+            {/* Closed Dates Management */}
+            <div className="glass-panel p-6 md:p-8 rounded-2xl border border-white/10 bg-white/5">
+                <h3 className="text-xl font-serif text-white mb-6 flex items-center gap-2">
+                    <span className="p-2 bg-red-500/20 rounded-lg text-red-400">📅</span>
+                    Tatil ve Kapalı Günler
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <h4 className="text-white font-bold mb-4">Yeni Kapalı Gün Ekle</h4>
+                        <form onSubmit={handleAddClosedDate} className="space-y-4">
+                            <input
+                                type="date"
+                                required
+                                className="w-full bg-dark-950/50 border border-white/10 text-white rounded-xl p-3"
+                                value={newClosedDate.date}
+                                onChange={e => setNewClosedDate({ ...newClosedDate, date: e.target.value })}
+                            />
+                            <input
+                                type="text"
+                                placeholder="Sebep (Örn: Bayram)"
+                                className="w-full bg-dark-950/50 border border-white/10 text-white rounded-xl p-3"
+                                value={newClosedDate.reason}
+                                onChange={e => setNewClosedDate({ ...newClosedDate, reason: e.target.value })}
+                            />
+                            <button type="submit" className="w-full bg-red-500/20 text-red-400 border border-red-500/50 py-3 rounded-xl font-bold hover:bg-red-500 hover:text-white transition-colors">
+                                Günü Kapat
+                            </button>
+                        </form>
+                    </div>
+
+                    <div>
+                        <h4 className="text-white font-bold mb-4">Kapalı Günler Listesi</h4>
+                        <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+                            {closedDates.length === 0 && <p className="text-gray-500 text-sm">Kapalı gün bulunmuyor.</p>}
+                            {closedDates.map(d => (
+                                <div key={d._id || d.id} className="flex justify-between items-center bg-white/5 p-3 rounded-lg border border-white/5">
+                                    <div>
+                                        <p className="text-white font-bold">{d.date}</p>
+                                        <p className="text-gray-500 text-xs">{d.reason}</p>
+                                    </div>
+                                    <button onClick={() => handleDeleteClosedDate(d._id || d.id)} className="text-red-400 hover:text-red-300 text-xs uppercase font-bold">Sil</button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };
+
+
 
 export default AdminDashboard;

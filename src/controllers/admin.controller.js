@@ -122,9 +122,62 @@ const updateAppointment = async (req, res, next) => {
     }
 }
 
+const whatsappService = require('../services/whatsapp.service'); // Ensure this is imported
+
+const sendBroadcast = async (req, res, next) => {
+    try {
+        const { message, filter } = req.body;
+        if (!message) return res.status(400).json({ error: 'Message is required' });
+
+        let phones = [];
+        const today = new Date().toISOString().split('T')[0];
+
+        if (filter === 'active') {
+            // Get unique phones from confirmed future appointments
+            const result = await Appointment.find({
+                status: 'confirmed',
+                date: { $gte: today }
+            }).distinct('phone');
+            phones = result;
+        } else {
+            // Get all unique phones from history
+            const result = await Appointment.find().distinct('phone');
+            phones = result;
+        }
+
+        // Filter valid phones (simple check)
+        phones = phones.filter(p => p && p.length >= 10);
+
+        logger.info(`Starting broadcast to ${phones.length} recipients. Filter: ${filter}`);
+
+        // Async processing (don't wait for all to finish for response)
+        // Batched sending to avoid overload
+        (async () => {
+            let successCount = 0;
+            for (const phone of phones) {
+                try {
+                    await whatsappService.sendMessage(phone, message);
+                    successCount++;
+                    // Tiny delay to be safe
+                    await new Promise(r => setTimeout(r, 1000));
+                } catch (e) {
+                    logger.error(`Broadcast fail to ${phone}: ${e.message}`);
+                }
+            }
+            logger.info(`Broadcast completed. Sent: ${successCount}/${phones.length}`);
+        })();
+
+        res.json({ success: true, recipientCount: phones.length, message: 'Gönderim sıraya alındı.' });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     login,
     getAppointments,
     createAppointment,
-    updateAppointment
+    updateAppointment,
+    sendBroadcast
 };
