@@ -7,8 +7,10 @@ const WP_API_KEY = import.meta.env.VITE_WP_API_KEY;
 
 // Harici servise istek at
 const wpFetch = async (endpoint, options = {}) => {
+    console.log(`[WhatsAppConnection] Requesting: ${endpoint}`, options);
     // Eğer harici servis tanımlıysa onu kullan, yoksa ana API'yi kullan
     if (WP_SERVICE_URL) {
+        console.log(`[WhatsAppConnection] Using External Service: ${WP_SERVICE_URL}`);
         const res = await fetch(`${WP_SERVICE_URL}${endpoint}`, {
             ...options,
             headers: {
@@ -17,14 +19,20 @@ const wpFetch = async (endpoint, options = {}) => {
                 ...options.headers
             }
         });
-        return res.json();
+        const json = await res.json();
+        console.log(`[WhatsAppConnection] External Response:`, json);
+        return json;
     } else {
         // Fallback: Ana API üzerinden
+        const targetUrl = `/admin${endpoint}`;
+        console.log(`[WhatsAppConnection] Using Internal API: ${targetUrl}`);
         if (options.method === 'POST') {
-            const res = await API.post(`/admin${endpoint}`, options.body ? JSON.parse(options.body) : {});
+            const res = await API.post(targetUrl, options.body ? JSON.parse(options.body) : {});
+            console.log(`[WhatsAppConnection] Internal POST Response:`, res.data);
             return res.data;
         }
-        const res = await API.get(`/admin${endpoint}`);
+        const res = await API.get(targetUrl);
+        console.log(`[WhatsAppConnection] Internal GET Response:`, res.data);
         return res.data;
     }
 };
@@ -46,7 +54,11 @@ const WhatsAppConnection = () => {
             setStatus(normalizedStatus);
             setQr(data.qr);
         } catch (error) {
-            console.error('Failed to fetch WhatsApp status', error);
+            console.error('[WhatsAppConnection] Failed to fetch WhatsApp status:', error.response?.data || error.message);
+            if (error.response) {
+                console.error('[WhatsAppConnection] Status:', error.response.status);
+                console.error('[WhatsAppConnection] Headers:', error.response.headers);
+            }
         }
     };
 
