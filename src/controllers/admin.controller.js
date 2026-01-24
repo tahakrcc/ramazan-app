@@ -25,6 +25,7 @@ const login = async (req, res, next) => {
             res.json({
                 _id: admin._id,
                 username: admin.username,
+                role: admin.role, // Added role
                 token: generateToken(admin._id, admin.role),
             });
         } else {
@@ -71,11 +72,12 @@ const getAppointments = async (req, res, next) => {
             }
         }
 
-        // Filter by Barber if requested
-        if (barberId) {
+        // Filter by Barber if requested OR if user is a BARBER
+        if (req.user.role === 'BARBER') {
+            query.barberId = req.user.id;
+        } else if (barberId) {
             query.barberId = barberId;
         }
-
 
         const appointments = await Appointment.find(query).sort({ date: 1, hour: 1 });
         res.json(appointments);
@@ -89,14 +91,22 @@ const createAppointment = async (req, res, next) => {
         // Admin can force create? Maybe still respect unique constraint to avoid double booking
         // Or maybe admin creation has looser validation (e.g. past dates?)
         // For now, let's reuse standard logic but allow specifying fields
-        const { customerName, phone, date, hour, barberId, barberName } = req.body;
+        const { customerName, phone, date, hour, service, notes } = req.body;
+        let { barberId, barberName } = req.body;
+
+        // Enforce Barber Ownership
+        if (req.user.role === 'BARBER') {
+            barberId = req.user.id;
+            barberName = req.user.name || 'Berber';
+        }
 
         const appointment = new Appointment({
             customerName,
             phone,
             date,
             hour,
-            service: 'Admin Created',
+            service: service || 'Admin Created',
+            notes: notes || '',
             createdFrom: 'admin',
             status: 'confirmed',
             barberId,
@@ -181,10 +191,50 @@ const sendBroadcast = async (req, res, next) => {
     }
 };
 
+// WhatsApp Yönetimi
+const getWhatsAppStatus = async (req, res) => {
+    try {
+        const status = await whatsappService.getStatus();
+        res.json(status);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+const pairWhatsApp = async (req, res) => {
+    try {
+        const { phone } = req.body;
+        if (!phone) {
+            return res.status(400).json({ message: 'Telefon numarası gerekli' });
+        }
+        const code = await whatsappService.requestPairing(phone);
+        res.json({ success: true, code });
+    } catch (error) {
+        console.error('Pairing error:', error);
+        res.status(500).json({ message: 'Eşleştirme kodu alınamadı', error: error.message });
+    }
+};
+
+const disconnectWhatsApp = async (req, res) => {
+    try {
+        const success = await whatsappService.logout();
+        if (success) {
+            res.json({ success: true, message: 'Bağlantı kesildi' });
+        } else {
+            res.status(500).json({ success: false, message: 'Bağlantı kesilemedi' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     login,
     getAppointments,
     createAppointment,
     updateAppointment,
-    sendBroadcast
+    sendBroadcast,
+    getWhatsAppStatus,
+    pairWhatsApp,
+    disconnectWhatsApp
 };

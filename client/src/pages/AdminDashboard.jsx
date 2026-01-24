@@ -22,69 +22,69 @@ const AdminDashboard = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [role, setRole] = useState(localStorage.getItem('role') || 'ADMIN');
 
-    // Security: Check token on mount
+    // -- Permissions Configuration --
+    const PERMISSIONS = {
+        ADMIN: ['dashboard', 'appointments', 'services', 'feedbacks', 'complaints', 'broadcast', 'staff', 'settings'],
+        BARBER: ['dashboard', 'appointments', 'feedbacks'],
+        STAFF: ['dashboard', 'appointments', 'feedbacks', 'complaints']
+    };
+
+    // Get allowed tabs for current role
+    const allowedTabs = PERMISSIONS[role] || PERMISSIONS['STAFF'];
+
+    // Redirect if accessing restricted tab
+    useEffect(() => {
+        if (!allowedTabs.includes(activeTab)) {
+            setActiveTab(allowedTabs[0]);
+        }
+    }, [activeTab, role, allowedTabs]);
+
+    // Security check on mount
     useEffect(() => {
         const token = localStorage.getItem('token');
         if (!token) {
             window.location.href = '/$2a$12$0mpfmkuPmo4iolYNPnlkUu3LhFUkhRW/qQl3Ej.lmgtJFULWY6jbS';
             return;
         }
-
-        // Verify token is valid by making a test API call
-        API.get('/admin/appointments')
-            .then(() => {
-                setIsAuthenticated(true);
-                setIsLoading(false);
-            })
-            .catch(() => {
-                localStorage.removeItem('token');
-                window.location.href = '/$2a$12$0mpfmkuPmo4iolYNPnlkUu3LhFUkhRW/qQl3Ej.lmgtJFULWY6jbS';
-            });
+        API.get('/admin/appointments').then(() => {
+            setIsAuthenticated(true);
+            setIsLoading(false);
+        }).catch(() => {
+            localStorage.removeItem('token');
+            window.location.href = '/$2a$12$0mpfmkuPmo4iolYNPnlkUu3LhFUkhRW/qQl3Ej.lmgtJFULWY6jbS';
+        });
     }, []);
 
-    // Close sidebar on tab change (mobile)
+    // Close sidebar on mobile tab select
     useEffect(() => {
         if (window.innerWidth < 768) setIsSidebarOpen(false);
     }, [activeTab]);
 
-    // Show loading while checking auth
-    if (isLoading) {
-        return (
-            <div className="flex h-screen bg-dark-950 items-center justify-center">
-                <div className="text-white text-xl">Yükleniyor...</div>
-            </div>
-        );
-    }
+    if (isLoading) return <div className="flex h-screen bg-dark-950 items-center justify-center"><div className="text-white text-xl">Yükleniyor...</div></div>;
+    if (!isAuthenticated) return null;
 
-    // Don't render if not authenticated
-    if (!isAuthenticated) {
-        return null;
-    }
-
+    const handleLogout = () => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('role');
+        window.location.href = '/$2a$12$0mpfmkuPmo4iolYNPnlkUu3LhFUkhRW/qQl3Ej.lmgtJFULWY6jbS';
+    };
 
     return (
         <div className="flex h-screen bg-dark-950 font-sans text-white overflow-hidden relative">
             <GrainOverlay />
-
-            {/* Ambient Background Glow */}
             <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-gold-500/10 rounded-full blur-[100px] pointer-events-none"></div>
             <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-blue-900/10 rounded-full blur-[120px] pointer-events-none"></div>
 
             {/* Mobile Header */}
             <div className="md:hidden fixed top-0 left-0 right-0 bg-dark-950/90 backdrop-blur-lg border-b border-white/10 z-50 px-6 py-4 flex justify-between items-center">
                 <h1 className="text-lg font-serif tracking-widest text-gold-500">BY RAMAZAN</h1>
-                <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="text-white">
-                    {isSidebarOpen ? <IconX /> : <IconMenu />}
-                </button>
+                <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="text-white">{isSidebarOpen ? <IconX /> : <IconMenu />}</button>
             </div>
 
             {/* Sidebar */}
-            <aside className={`
-                fixed md:relative top-0 left-0 bottom-0 w-72 bg-dark-950/95 md:bg-white/5 backdrop-blur-xl border-r border-white/10 flex flex-col z-40 transition-transform duration-300 transform
-                ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-                pt-20 md:pt-0
-            `}>
+            <aside className={`fixed md:relative top-0 left-0 bottom-0 w-72 bg-dark-950/95 md:bg-white/5 backdrop-blur-xl border-r border-white/10 flex flex-col z-40 transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} pt-20 md:pt-0`}>
                 <div className="p-8 border-b border-white/5 hidden md:block">
                     <h1 className="text-2xl font-serif text-white tracking-wider flex items-center gap-2">
                         <span className="w-8 h-8 rounded-full bg-gold-500 text-dark-950 flex items-center justify-center text-sm font-bold">R</span>
@@ -93,29 +93,30 @@ const AdminDashboard = () => {
                     <p className="text-gray-500 text-[10px] uppercase tracking-[0.2em] mt-3 ml-1">Admin Console</p>
                 </div>
 
-                <nav className="flex-1 overflow-y-auto py-8 px-4 space-y-2">
-                    <SidebarItem icon="📊" label="Genel Bakış" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-                    <SidebarItem icon="📅" label="Randevular" active={activeTab === 'appointments'} onClick={() => setActiveTab('appointments')} />
-                    <SidebarItem icon="✂️" label="Hizmetler" active={activeTab === 'services'} onClick={() => setActiveTab('services')} />
-                    <SidebarItem icon="⭐" label="Yorumlar" active={activeTab === 'feedbacks'} onClick={() => setActiveTab('feedbacks')} />
-                    <SidebarItem icon="⚠️" label="Şikayetler" active={activeTab === 'complaints'} onClick={() => setActiveTab('complaints')} />
-                    <SidebarItem icon="📢" label="Toplu Mesaj" active={activeTab === 'broadcast'} onClick={() => setActiveTab('broadcast')} />
-                    <SidebarItem icon="👥" label="Personel" active={activeTab === 'staff'} onClick={() => setActiveTab('staff')} />
-                    <SidebarItem icon="⚙️" label="Ayarlar" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
+                <nav className="flex-1 overflow-y-auto py-8 px-4 space-y-2 custom-scrollbar">
+                    {allowedTabs.includes('dashboard') && <SidebarItem icon="📊" label="Genel Bakış" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />}
+                    {allowedTabs.includes('appointments') && <SidebarItem icon="📅" label="Randevular" active={activeTab === 'appointments'} onClick={() => setActiveTab('appointments')} />}
+                    {allowedTabs.includes('services') && <SidebarItem icon="✂️" label="Hizmetler" active={activeTab === 'services'} onClick={() => setActiveTab('services')} />}
+                    {allowedTabs.includes('feedbacks') && <SidebarItem icon="⭐" label="Yorumlar" active={activeTab === 'feedbacks'} onClick={() => setActiveTab('feedbacks')} />}
+                    {allowedTabs.includes('complaints') && <SidebarItem icon="⚠️" label="Şikayetler" active={activeTab === 'complaints'} onClick={() => setActiveTab('complaints')} />}
+                    {allowedTabs.includes('broadcast') && <SidebarItem icon="📢" label="Toplu Mesaj" active={activeTab === 'broadcast'} onClick={() => setActiveTab('broadcast')} />}
+                    {allowedTabs.includes('staff') && <SidebarItem icon="👥" label="Personel" active={activeTab === 'staff'} onClick={() => setActiveTab('staff')} />}
+                    {allowedTabs.includes('settings') && <SidebarItem icon="⚙️" label="Ayarlar" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />}
                 </nav>
 
                 <div className="p-6 border-t border-white/5 bg-white/5">
                     <div className="flex items-center gap-3 mb-4">
-                        <div className="w-10 h-10 rounded-full bg-gold-500 flex items-center justify-center text-dark-950 font-bold">TR</div>
+                        <div className="w-10 h-10 rounded-full bg-gold-500 flex items-center justify-center text-dark-950 font-bold">
+                            {role === 'ADMIN' ? 'A' : role === 'BARBER' ? 'B' : 'P'}
+                        </div>
                         <div>
-                            <p className="text-sm font-medium text-white">Ramazan</p>
+                            <p className="text-sm font-medium text-white">
+                                {role === 'ADMIN' ? 'Yönetici' : role === 'BARBER' ? 'Berber' : 'Personel'}
+                            </p>
                             <p className="text-xs text-green-400">● Çevrimiçi</p>
                         </div>
                     </div>
-                    <button onClick={() => {
-                        localStorage.removeItem('token');
-                        window.location.href = '/$2a$12$0mpfmkuPmo4iolYNPnlkUu3LhFUkhRW/qQl3Ej.lmgtJFULWY6jbS';
-                    }} className="w-full flex items-center justify-center gap-2 px-4 py-2 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors text-xs font-semibold uppercase tracking-wider">
+                    <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-2 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors text-xs font-semibold uppercase tracking-wider">
                         Güvenli Çıkış
                     </button>
                 </div>
@@ -786,7 +787,6 @@ const StaffManager = () => {
     const [staff, setStaff] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
-    const [editingId, setEditingId] = useState(null);
     const [formData, setFormData] = useState({ username: '', password: '', name: '', role: 'BARBER', color: '#D4AF37' });
 
     useEffect(() => {
@@ -807,42 +807,13 @@ const StaffManager = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            if (editingId) {
-                await API.put(`/admin/staff/${editingId}`, formData);
-                toast.success('Personel güncellendi ✅');
-            } else {
-                await API.post('/admin/staff', formData);
-                toast.success('Personel eklendi ✅');
-            }
-
+            await API.post('/admin/staff', formData);
+            toast.success('Personel eklendi ✅');
             setShowModal(false);
-            setEditingId(null);
             setFormData({ username: '', password: '', name: '', role: 'BARBER', color: '#D4AF37' });
             fetchStaff();
         } catch (error) {
             toast.error(error.response?.data?.error || 'İşlem başarısız');
-        }
-    };
-
-    const handleEdit = (user) => {
-        setEditingId(user._id);
-        setFormData({
-            username: user.username,
-            password: '', // Leave empty to keep unchanged
-            name: user.name,
-            role: user.role,
-            color: user.color || '#D4AF37'
-        });
-        setShowModal(true);
-    };
-
-    const handleToggleStatus = async (user) => {
-        try {
-            await API.put(`/admin/staff/${user._id}`, { isActive: !user.isActive });
-            toast.success(`Durum güncellendi: ${!user.isActive ? 'Aktif' : 'Pasif'}`);
-            fetchStaff();
-        } catch (error) {
-            toast.error('Güncelleme başarısız');
         }
     };
 
@@ -858,7 +829,6 @@ const StaffManager = () => {
     };
 
     const openCreateModal = () => {
-        setEditingId(null);
         setFormData({ username: '', password: '', name: '', role: 'BARBER', color: '#D4AF37' });
         setShowModal(true);
     };
@@ -884,7 +854,7 @@ const StaffManager = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {staff.map(user => (
-                    <div key={user._id} className={`bg-white/5 border rounded-2xl p-6 relative group transition-all ${user.isActive ? 'border-white/10 hover:border-white/20' : 'border-red-500/20 opacity-70'}`}>
+                    <div key={user._id} className="bg-white/5 border border-white/10 hover:border-white/20 rounded-2xl p-6 relative group transition-all">
                         <div className="flex items-start justify-between mb-4">
                             <div className="flex items-center gap-4">
                                 <div className="w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold bg-dark-950 border border-white/10" style={{ color: user.color }}>
@@ -893,32 +863,17 @@ const StaffManager = () => {
                                 <div>
                                     <h3 className="text-white font-bold text-lg">{user.name}</h3>
                                     <p className="text-gray-500 text-xs">@{user.username}</p>
-                                    {!user.isActive && <span className="text-red-400 text-[10px] uppercase font-bold border border-red-500/30 px-1 rounded ml-1">Pasif</span>}
                                 </div>
                             </div>
-                            <div className="flex gap-1">
-                                <button onClick={() => handleEdit(user)} className="text-blue-400 hover:text-blue-300 p-2 rounded-lg hover:bg-white/5 transition-colors" title="Düzenle">
-                                    ✏️
-                                </button>
-                                <button onClick={() => handleDelete(user._id)} className="text-gray-600 hover:text-red-400 p-2 rounded-lg hover:bg-white/5 transition-colors" title="Sil">
-                                    <IconX />
-                                </button>
-                            </div>
-                        </div>
-                        <div className="flex items-center justify-between mt-4">
-                            <div className="flex items-center gap-2">
-                                <span className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider ${user.role === 'ADMIN' ? 'bg-gold-500/20 text-gold-500' : 'bg-blue-500/20 text-blue-400'}`}>
-                                    {user.role}
-                                </span>
-                                <div className="w-6 h-6 rounded-full border border-white/10" style={{ backgroundColor: user.color }}></div>
-                            </div>
-
-                            <button
-                                onClick={() => handleToggleStatus(user)}
-                                className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase transition-colors ${user.isActive ? 'bg-green-500/10 text-green-400 hover:bg-red-500/10 hover:text-red-400' : 'bg-red-500/10 text-red-400 hover:bg-green-500/10 hover:text-green-400'}`}
-                            >
-                                {user.isActive ? 'Aktif' : 'Pasif Yap'}
+                            <button onClick={() => handleDelete(user._id)} className="text-gray-600 hover:text-red-400 p-2 rounded-lg hover:bg-white/5 transition-colors" title="Sil">
+                                <IconX />
                             </button>
+                        </div>
+                        <div className="flex items-center gap-2 mt-4">
+                            <span className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider ${user.role === 'ADMIN' ? 'bg-gold-500/20 text-gold-500' : 'bg-blue-500/20 text-blue-400'}`}>
+                                {user.role}
+                            </span>
+                            <div className="w-6 h-6 rounded-full border border-white/10" style={{ backgroundColor: user.color }}></div>
                         </div>
                     </div>
                 ))}
@@ -932,7 +887,7 @@ const StaffManager = () => {
                         className="bg-dark-900 border border-white/20 p-8 rounded-2xl w-full max-w-md relative shadow-2xl"
                     >
                         <button type="button" onClick={() => setShowModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white"><IconX /></button>
-                        <h3 className="text-xl font-serif text-white mb-6">{editingId ? 'Personeli Düzenle' : 'Yeni Personel Ekle'}</h3>
+                        <h3 className="text-xl font-serif text-white mb-6">Yeni Personel Ekle</h3>
 
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div>
@@ -944,8 +899,8 @@ const StaffManager = () => {
                                 <input required type="text" className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-white outline-none focus:border-purple-500 transition-colors" value={formData.username} onChange={e => setFormData({ ...formData, username: e.target.value })} />
                             </div>
                             <div>
-                                <label className="text-xs text-gray-400 mb-1 block pl-1">Şifre {editingId && '(Değiştirmek için doldurun)'}</label>
-                                <input {...(!editingId && { required: true })} type="password" className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-white outline-none focus:border-purple-500 transition-colors" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} placeholder={editingId ? '******' : ''} />
+                                <label className="text-xs text-gray-400 mb-1 block pl-1">Şifre</label>
+                                <input required type="password" className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-white outline-none focus:border-purple-500 transition-colors" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
@@ -962,7 +917,7 @@ const StaffManager = () => {
                                 </div>
                             </div>
                             <button type="submit" className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl mt-4 transition-colors">
-                                {editingId ? 'Güncelle' : 'Oluştur'}
+                                Oluştur
                             </button>
                         </form>
                     </motion.div>

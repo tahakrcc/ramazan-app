@@ -3,13 +3,12 @@ const router = express.Router();
 const appointmentRoutes = require('./appointment.routes');
 const adminRoutes = require('./admin.routes');
 const feedbackRoutes = require('./feedback.routes');
-const { apiLimiter } = require('../middlewares/rateLimiter');
+const complaintRoutes = require('./complaint.routes');
 
-// Public API Rate Limit
-router.use('/appointments', apiLimiter, appointmentRoutes);
-
-// Admin Routes (Login has its own limiter)
+// Routes (apiLimiter already applied at app.js level)
+router.use('/appointments', appointmentRoutes);
 router.use('/admin', adminRoutes);
 router.use('/feedbacks', feedbackRoutes);
+router.use('/complaints', complaintRoutes);
 
 module.exports = router;

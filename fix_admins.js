@@ -12,10 +12,15 @@ const fixAdmins = async () => {
             { $set: { isActive: true } }
         );
 
-        console.log(`Updated ${result.modifiedCount} admins.`);
+        const allAdmins = await Admin.find({});
+        console.log('Current Admins:', allAdmins.map(a => ({ id: a._id, u: a.username, n: a.name, r: a.role })));
 
-        // Also force update all just in case
-        // await Admin.updateMany({}, { $set: { isActive: true } });
+        // Explicitly set the name for the main admin user
+        const ramazanUpdate = await Admin.updateOne(
+            { username: 'admin' },
+            { $set: { name: 'Ramazan', role: 'ADMIN' } }
+        );
+        console.log(`Updated main admin name to Ramazan: ${ramazanUpdate.modifiedCount}`);
 
         process.exit();
     } catch (error) {

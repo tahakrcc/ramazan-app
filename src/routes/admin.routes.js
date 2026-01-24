@@ -12,20 +12,28 @@ const logger = require('../config/logger');
 // Public Admin Route
 router.post('/secure-login-action', loginLimiter, adminController.login);
 
-// Protected Admin Routes
-router.use(protect);
-
 // =============== APPOINTMENTS ===============
-router.get('/appointments', adminController.getAppointments);
-router.post('/appointments', adminController.createAppointment);
-router.put('/appointments/:id', adminController.updateAppointment);
+router.get('/appointments', protect, adminController.getAppointments);
+router.post('/appointments', protect, adminController.createAppointment);
+router.put('/appointments/:id', protect, adminController.updateAppointment);
 
 // Delete appointment
-router.delete('/appointments/:id', async (req, res, next) => {
+router.delete('/appointments/:id', protect, async (req, res, next) => {
     try {
         const { id } = req.params;
+
+        // Ownership Check
+        if (req.user.role === 'BARBER') {
+            const appt = await Appointment.findById(id);
+            if (!appt) return res.status(404).json({ error: 'Randevu bulunamadı' });
+
+            if (appt.barberId && appt.barberId.toString() !== req.user.id) {
+                return res.status(403).json({ error: 'Bu randevuyu iptal etme yetkiniz yok.' });
+            }
+        }
+
         await appointmentService.cancelAppointment(id);
-        logger.info(`Admin cancelled appointment: ${id}`);
+        logger.info(`Admin cancelled appointment: ${id} (User: ${req.user.username})`);
         res.json({ message: 'Randevu iptal edildi.' });
     } catch (error) {
         next(error);
@@ -33,7 +41,7 @@ router.delete('/appointments/:id', async (req, res, next) => {
 });
 
 // Update appointment notes
-router.patch('/appointments/:id/notes', async (req, res, next) => {
+router.patch('/appointments/:id/notes', protect, async (req, res, next) => {
     try {
         const { id } = req.params;
         const { notes } = req.body;
@@ -45,7 +53,7 @@ router.patch('/appointments/:id/notes', async (req, res, next) => {
 });
 
 // Search appointments
-router.get('/appointments/search', async (req, res, next) => {
+router.get('/appointments/search', protect, async (req, res, next) => {
     try {
         const { q } = req.query;
         if (!q) return res.json([]);
@@ -64,7 +72,7 @@ router.get('/appointments/search', async (req, res, next) => {
 });
 
 // =============== CLOSED DATES ===============
-router.get('/closed-dates', async (req, res, next) => {
+router.get('/closed-dates', protect, async (req, res, next) => {
     try {
         const dates = await ClosedDate.find().sort({ date: 1 });
         res.json(dates);
@@ -73,7 +81,7 @@ router.get('/closed-dates', async (req, res, next) => {
     }
 });
 
-router.post('/closed-dates', async (req, res, next) => {
+router.post('/closed-dates', protect, async (req, res, next) => {
     try {
         const { date, reason } = req.body;
         const closedDate = await ClosedDate.create({ date, reason: reason || 'Tatil' });
@@ -87,7 +95,7 @@ router.post('/closed-dates', async (req, res, next) => {
     }
 });
 
-router.delete('/closed-dates/:id', async (req, res, next) => {
+router.delete('/closed-dates/:id', protect, async (req, res, next) => {
     try {
         await ClosedDate.findByIdAndDelete(req.params.id);
         res.json({ message: 'Kapalı gün silindi.' });
@@ -97,7 +105,7 @@ router.delete('/closed-dates/:id', async (req, res, next) => {
 });
 
 // =============== SERVICES ===============
-router.get('/services', async (req, res, next) => {
+router.get('/services', protect, async (req, res, next) => {
     try {
         const services = await Service.find().sort({ name: 1 });
         res.json(services);
@@ -106,7 +114,7 @@ router.get('/services', async (req, res, next) => {
     }
 });
 
-router.post('/services', async (req, res, next) => {
+router.post('/services', protect, async (req, res, next) => {
     try {
         const { id, name, price, duration } = req.body;
         const service = await Service.create({ id, name, price, duration: duration || 60 });
@@ -120,7 +128,7 @@ router.post('/services', async (req, res, next) => {
     }
 });
 
-router.put('/services/:id', async (req, res, next) => {
+router.put('/services/:id', protect, async (req, res, next) => {
     try {
         const { name, price, duration, isActive } = req.body;
         const service = await Service.findByIdAndUpdate(
@@ -134,7 +142,7 @@ router.put('/services/:id', async (req, res, next) => {
     }
 });
 
-router.delete('/services/:id', async (req, res, next) => {
+router.delete('/services/:id', protect, async (req, res, next) => {
     try {
         await Service.findByIdAndDelete(req.params.id);
         res.json({ message: 'Hizmet silindi.' });
@@ -144,7 +152,7 @@ router.delete('/services/:id', async (req, res, next) => {
 });
 
 // =============== STATISTICS ===============
-router.get('/stats', async (req, res, next) => {
+router.get('/stats', protect, async (req, res, next) => {
     try {
         const now = new Date();
         const today = now.toISOString().split('T')[0];
@@ -208,7 +216,7 @@ router.get('/stats', async (req, res, next) => {
 });
 
 // =============== SETTINGS ===============
-router.get('/settings', async (req, res, next) => {
+router.get('/settings', protect, async (req, res, next) => {
     try {
         const Settings = require('../models/settings.model');
         const settings = await Settings.getSettings();
@@ -218,7 +226,7 @@ router.get('/settings', async (req, res, next) => {
     }
 });
 
-router.put('/settings', async (req, res, next) => {
+router.put('/settings', protect, async (req, res, next) => {
     try {
         const Settings = require('../models/settings.model');
         const { appointmentStartHour, appointmentEndHour, bookingRangeDays, businessAddress, businessMapsLink } = req.body;
@@ -241,12 +249,12 @@ router.put('/settings', async (req, res, next) => {
 });
 
 // =============== BROADCAST ===============
-router.post('/broadcast', adminController.sendBroadcast);
+router.post('/broadcast', protect, adminController.sendBroadcast);
 
 // =============== WHATSAPP ===============
 const whatsappService = require('../services/whatsapp.service');
 
-router.get('/whatsapp/status', async (req, res, next) => {
+router.get('/whatsapp/status', protect, async (req, res, next) => {
     try {
         const status = await whatsappService.getStatus();
         res.json(status);
@@ -255,7 +263,7 @@ router.get('/whatsapp/status', async (req, res, next) => {
     }
 });
 
-router.post('/whatsapp/logout', async (req, res, next) => {
+router.post('/whatsapp/logout', protect, async (req, res, next) => {
     try {
         await whatsappService.logout();
         res.json({ message: 'WhatsApp bağlantısı kesildi.' });
@@ -267,7 +275,7 @@ router.post('/whatsapp/logout', async (req, res, next) => {
 // =============== STAFF MANAGEMENT ===============
 const AdminUser = require('../models/admin.model'); // Admin model is effectively User model
 
-router.get('/staff', async (req, res, next) => {
+router.get('/staff', protect, async (req, res, next) => {
     try {
         const staff = await AdminUser.find().select('-passwordHash').sort({ createdAt: -1 });
         res.json(staff);
@@ -276,7 +284,7 @@ router.get('/staff', async (req, res, next) => {
     }
 });
 
-router.post('/staff', async (req, res, next) => {
+router.post('/staff', protect, async (req, res, next) => {
     try {
         const { username, password, name, role, color } = req.body;
 
@@ -309,7 +317,7 @@ router.post('/staff', async (req, res, next) => {
     }
 });
 
-router.put('/staff/:id', async (req, res, next) => {
+router.put('/staff/:id', protect, async (req, res, next) => {
     try {
         const { username, password, name, role, color, isActive } = req.body;
         const { id } = req.params;
@@ -347,7 +355,7 @@ router.put('/staff/:id', async (req, res, next) => {
     }
 });
 
-router.delete('/staff/:id', async (req, res, next) => {
+router.delete('/staff/:id', protect, async (req, res, next) => {
     try {
         const { id } = req.params;
 

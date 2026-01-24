@@ -16,6 +16,7 @@ const AdminLoginPage = () => {
         try {
             const res = await API.post('/admin/secure-login-action', formData);
             localStorage.setItem('token', res.data.token);
+            localStorage.setItem('role', res.data.role); // Store role
             toast.success('Giriş başarılı');
             navigate('/admin/dashboard');
         } catch (error) {

@@ -6,11 +6,16 @@ const logger = require('../config/logger');
 
 const getAllFeedbacks = async (req, res, next) => {
     try {
-        const feedbacks = await Feedback.find().sort({ createdAt: -1 });
+        let query = {};
+        // If user is a BARBER, only show their feedbacks
+        if (req.user && req.user.role === 'BARBER') {
+            query.barberId = req.user.id;
+        }
+
+        const feedbacks = await Feedback.find(query).sort({ createdAt: -1 });
         res.json(feedbacks);
     } catch (error) { next(error); }
 };
-
 const getApprovedFeedbacks = async (req, res, next) => {
     try {
         const feedbacks = await Feedback.find({ isApproved: true }).sort({ createdAt: -1 });
@@ -33,15 +38,12 @@ const deleteFeedback = async (req, res, next) => {
         res.json({ message: 'Deleted' });
     } catch (error) { next(error); }
 };
-
 // === Bot / Internal Operations ===
 
 const createFeedbackFromBot = async (req, res, next) => {
     try {
         const { phone, message } = req.body;
 
-        // Parse message: Expecting "5 This was great" format or just "5"
-        // Regex looks for a number 1-5 at the start
         const match = message.trim().match(/^([1-5])\s*(.*)/s);
 
         if (!match) {
@@ -51,18 +53,20 @@ const createFeedbackFromBot = async (req, res, next) => {
         const rating = parseInt(match[1]);
         const comment = match[2] || 'Puan verildi.';
 
-        // Attempt to find customer name from appointments or BotState context
-        // For simplicity, we'll store generic if not found, but ideally we passed it in context
-        // Just use phone as name fallback or look up latest appointment
         const Appointment = require('../models/appointment.model');
-        const lastAppt = await Appointment.findOne({ phone: new RegExp(phone.slice(-10)) }).sort({ date: -1 });
+        const lastAppt = await Appointment.findOne({ phone: new RegExp(phone.slice(-10)) }).sort({ date: -1 }); // Get latest
+
         const customerName = lastAppt ? lastAppt.customerName : 'Müşteri';
+        const barberId = lastAppt ? lastAppt.barberId : null;
+        const barberName = lastAppt ? lastAppt.barberName : null;
 
         await Feedback.create({
             customerName,
             phone,
             rating,
             comment,
+            barberId,
+            barberName,
             source: 'whatsapp'
         });
 

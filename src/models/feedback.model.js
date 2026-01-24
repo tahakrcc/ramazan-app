@@ -11,6 +11,14 @@ const feedbackSchema = new mongoose.Schema({
         required: true,
         trim: true
     },
+    barberId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Admin'
+    },
+    barberName: {
+        type: String,
+        trim: true
+    },
     rating: {
         type: Number,
         required: true,

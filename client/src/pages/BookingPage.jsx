@@ -79,6 +79,35 @@ const BookingPage = () => {
 
 // --- Sub Components ---
 
+const HeroSlideshow = () => {
+    const images = ['/hero1.jpg', '/hero2.jpg', '/hero3.jpg'];
+    const [currentIndex, setCurrentIndex] = useState(0);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setCurrentIndex((prev) => (prev + 1) % images.length);
+        }, 5000); // Change every 5 seconds
+        return () => clearInterval(interval);
+    }, []);
+
+    return (
+        <div className="relative w-full h-full">
+            <AnimatePresence mode="wait">
+                <motion.img
+                    key={currentIndex}
+                    src={images[currentIndex]}
+                    alt="Hero Background"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 0.6 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 1.5, ease: 'easeInOut' }}
+                    className="absolute inset-0 w-full h-full object-cover"
+                />
+            </AnimatePresence>
+        </div>
+    );
+};
+
 
 
 const LoadingScreen = () => (
@@ -120,13 +149,9 @@ const LandingView = ({ onStart, services, feedbacks }) => {
         >
             {/* Hero Section */}
             <section className="h-screen flex items-center justify-center relative overflow-hidden px-6">
-                {/* Background Image */}
+                {/* Background Slideshow */}
                 <div className="absolute inset-0 z-0">
-                    <img
-                        src="https://images.unsplash.com/photo-1618773928121-c32242e63f39?q=80&w=2070&auto=format&fit=crop"
-                        alt="Background"
-                        className="w-full h-full object-cover opacity-60"
-                    />
+                    <HeroSlideshow />
                     <div className="absolute inset-0 bg-gradient-to-t from-dark-950 via-dark-950/80 to-dark-950/40" />
                 </div>
 
@@ -803,8 +828,8 @@ const AboutSection = () => (
         <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-20 items-center">
             <div className="relative aspect-[3/4] overflow-hidden group rounded-sm">
                 <img
-                    src="https://images.unsplash.com/photo-1585747860715-2ba37e788b70?q=80&w=2074&auto=format&fit=crop"
-                    alt="Barber"
+                    src="/about.jpg"
+                    alt="By Ramazan Berber"
                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 filter grayscale group-hover:grayscale-0"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-dark-950/80 to-transparent opacity-60"></div>

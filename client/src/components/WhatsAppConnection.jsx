@@ -40,9 +40,8 @@ const wpFetch = async (endpoint, options = {}) => {
 const WhatsAppConnection = () => {
     const [status, setStatus] = useState('INITIALIZING');
     const [qr, setQr] = useState(null);
-    const [phone, setPhone] = useState('');
     const [pairingCode, setPairingCode] = useState(null);
-    const [pairingLoading, setPairingLoading] = useState(false);
+    const [phone, setPhone] = useState('');
 
     const fetchStatus = async () => {
         try {
@@ -53,6 +52,7 @@ const WhatsAppConnection = () => {
                     data.status || 'INITIALIZING';
             setStatus(normalizedStatus);
             setQr(data.qr);
+            setPairingCode(data.pairingCode);
         } catch (error) {
             console.error('[WhatsAppConnection] Failed to fetch WhatsApp status:', error.response?.data || error.message);
             if (error.response) {
@@ -95,6 +95,28 @@ const WhatsAppConnection = () => {
             {status === 'CONNECTING' && (
                 <div className="text-orange-500 font-medium animate-pulse">
                     ⏳ Bağlanıyor...
+                </div>
+            )}
+            {status === 'PAIRING_CODE_READY' && pairingCode && (
+                <div className="text-center w-full max-w-md mx-auto flex flex-col items-center animate-in fade-in zoom-in duration-300 px-4">
+                    <p className="text-sm font-bold text-gray-900 mb-4">WhatsApp ile Bağla (Pairing Code)</p>
+                    <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-4 md:p-8 rounded-2xl border-2 border-green-200 shadow-lg w-full overflow-hidden">
+                        <div className="text-3xl md:text-6xl font-bold text-green-600 tracking-widest md:tracking-[0.5em] font-mono whitespace-nowrap overflow-x-auto text-center">
+                            {pairingCode}
+                        </div>
+                    </div>
+                    <div className="mt-6 space-y-2 text-left bg-blue-50 p-4 rounded-xl border border-blue-200 w-full">
+                        <p className="text-xs font-bold text-gray-900">📱 Nasıl Bağlanılır:</p>
+                        <ol className="text-xs text-gray-700 space-y-1 list-decimal list-inside">
+                            <li>WhatsApp'ı aç</li>
+                            <li>Ayarlar → Bağlı Cihazlar</li>
+                            <li>"Cihaz Bağla" → "Telefon numarasıyla bağla"</li>
+                            <li>Yukarıdaki 8 haneli kodu gir</li>
+                        </ol>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-3">
+                        Kod 1 dakika içinde geçersiz olacak
+                    </p>
                 </div>
             )}
             {status === 'QR_READY' && qr && (
