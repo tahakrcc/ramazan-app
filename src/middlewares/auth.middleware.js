@@ -13,7 +13,9 @@ const protect = (req, res, next) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
         // Check role (Privilege Escalation Protection)
-        if (decoded.role !== 'ADMIN') {
+        // Allow ADMIN, BARBER, STAFF to access admin panel
+        const allowedRoles = ['ADMIN', 'BARBER', 'STAFF'];
+        if (!allowedRoles.includes(decoded.role)) {
             return res.status(403).json({ error: 'Yetkisiz erişim.' });
         }
 

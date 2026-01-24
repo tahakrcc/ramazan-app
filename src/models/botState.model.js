@@ -15,6 +15,10 @@ const botStateSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.Mixed,
         default: {}
     },
+    data: {
+        type: mongoose.Schema.Types.Mixed,
+        default: {}
+    },
     updatedAt: {
         type: Date,
         default: Date.now

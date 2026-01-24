@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import API from '../utils/api';
 import { toast } from 'react-toastify';
 import { format, startOfWeek, addDays, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, parseISO } from 'date-fns';
@@ -14,6 +15,7 @@ import { Menu, X, MessageSquare, Plus, QrCode } from 'lucide-react'; // Assumes 
 const IconMenu = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="18" x2="20" y2="18"></line></svg>;
 const IconX = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
 const IconPlus = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>;
+const IconUsers = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>;
 
 const AdminDashboard = () => {
     const [activeTab, setActiveTab] = useState('dashboard');
@@ -96,7 +98,9 @@ const AdminDashboard = () => {
                     <SidebarItem icon="📅" label="Randevular" active={activeTab === 'appointments'} onClick={() => setActiveTab('appointments')} />
                     <SidebarItem icon="✂️" label="Hizmetler" active={activeTab === 'services'} onClick={() => setActiveTab('services')} />
                     <SidebarItem icon="⭐" label="Yorumlar" active={activeTab === 'feedbacks'} onClick={() => setActiveTab('feedbacks')} />
+                    <SidebarItem icon="⚠️" label="Şikayetler" active={activeTab === 'complaints'} onClick={() => setActiveTab('complaints')} />
                     <SidebarItem icon="📢" label="Toplu Mesaj" active={activeTab === 'broadcast'} onClick={() => setActiveTab('broadcast')} />
+                    <SidebarItem icon="👥" label="Personel" active={activeTab === 'staff'} onClick={() => setActiveTab('staff')} />
                     <SidebarItem icon="⚙️" label="Ayarlar" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
                 </nav>
 
@@ -126,7 +130,9 @@ const AdminDashboard = () => {
                             {activeTab === 'appointments' && 'Randevu Yönetimi'}
                             {activeTab === 'services' && 'Hizmet & Fiyat Yönetimi'}
                             {activeTab === 'feedbacks' && 'Müşteri Yorumları'}
+                            {activeTab === 'complaints' && 'Şikayet & Talep Yönetimi'}
                             {activeTab === 'broadcast' && 'Mesaj Merkezi'}
+                            {activeTab === 'staff' && 'Personel Yönetimi'}
                             {activeTab === 'settings' && 'Sistem Ayarları'}
                         </h2>
                     </div>
@@ -152,7 +158,10 @@ const AdminDashboard = () => {
                             {activeTab === 'appointments' && <AppointmentsManager />}
                             {activeTab === 'services' && <ServicesManager />}
                             {activeTab === 'feedbacks' && <FeedbackManager />}
+                            {activeTab === 'complaints' && <ComplaintsManager />}
+                            {activeTab === 'complaints' && <ComplaintsManager />}
                             {activeTab === 'broadcast' && <BroadcastManager />}
+                            {activeTab === 'staff' && <StaffManager />}
                             {activeTab === 'settings' && <SettingsManager />}
                         </motion.div>
                     </AnimatePresence>
@@ -382,10 +391,31 @@ const AppointmentsManager = () => {
     const [viewMode, setViewMode] = useState('list');
     const [subTab, setSubTab] = useState('active'); // active, archive
     const [appointments, setAppointments] = useState([]);
-    const [showModal, setShowModal] = useState(false);
 
-    // Manual Booking State
-    const [manualForm, setManualForm] = useState({ customerName: '', phone: '', date: '', hour: '' });
+    // Modals
+    const [showModal, setShowModal] = useState(false);
+    const [isEditMode, setIsEditMode] = useState(false);
+    const [editingId, setEditingId] = useState(null);
+
+    const [showHistoryModal, setShowHistoryModal] = useState(false);
+    const [historyData, setHistoryData] = useState([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
+
+    // Manual Booking / Edit Form
+    const [manualForm, setManualForm] = useState({ customerName: '', phone: '', date: '', hour: '', notes: '', barberId: '' });
+    const [barbers, setBarbers] = useState([]);
+    const [selectedBarber, setSelectedBarber] = useState('');
+
+    useEffect(() => {
+        const fetchBarbers = async () => {
+            try {
+                const res = await API.get('/admin/staff');
+                // Filter only those who can take appointments (e.g. role BARBER or ADMIN)
+                setBarbers(res.data);
+            } catch (e) { console.error(e); }
+        };
+        fetchBarbers();
+    }, []);
 
     const fetchAppointments = async () => {
         try {
@@ -393,23 +423,85 @@ const AppointmentsManager = () => {
             if (subTab === 'archive') {
                 url += '?view=archive';
             }
+            if (selectedBarber) {
+                url += `${url.includes('?') ? '&' : '?'}barberId=${selectedBarber}`;
+            }
             const res = await API.get(url);
             setAppointments(res.data);
         } catch (error) { toast.error('Yüklenemedi: ' + (error.response?.data?.error || error.message)); }
     };
 
-    useEffect(() => { fetchAppointments(); }, [subTab]);
+    useEffect(() => { fetchAppointments(); }, [subTab, selectedBarber]);
 
-    const handleCreate = async (e) => {
+    // Auto-select barber if filtering by one
+    useEffect(() => {
+        if (selectedBarber && !isEditMode) {
+            setManualForm(prev => ({ ...prev, barberId: selectedBarber }));
+        }
+    }, [selectedBarber, isEditMode]);
+
+    // --- Handlers ---
+
+    const openCreateModal = () => {
+        setIsEditMode(false);
+        setManualForm({ customerName: '', phone: '', date: '', hour: '', notes: '', barberId: selectedBarber || '' });
+        setShowModal(true);
+    };
+
+    const openEditModal = (appt) => {
+        setIsEditMode(true);
+        setEditingId(appt._id || appt.id);
+        setManualForm({
+            customerName: appt.customerName,
+            phone: appt.phone,
+            date: appt.date,
+            hour: appt.hour,
+            notes: appt.notes || '',
+            barberId: appt.barberId || ''
+        });
+        setShowModal(true);
+    };
+
+    const openBlockModal = () => {
+        setIsEditMode(false);
+        setManualForm({
+            customerName: 'KAPALI',
+            phone: '0000000000',
+            date: '',
+            hour: '',
+            notes: 'Mola / Kapalı Slot'
+        });
+        setShowModal(true);
+    };
+
+    const handleSave = async (e) => {
         e.preventDefault();
-        if (!window.confirm('Yeni randevuyu onaylıyor musunuz?')) return;
+        const confirmMsg = isEditMode ? 'Değişiklikleri kaydediyor musunuz?' : 'Yeni kaydı onaylıyor musunuz?';
+        if (!window.confirm(confirmMsg)) return;
+
         try {
-            await API.post('/admin/appointments', manualForm);
-            toast.success('Randevu oluşturuldu');
+            if (isEditMode) {
+                await API.put(`/admin/appointments/${editingId}`, manualForm);
+                toast.success('Randevu güncellendi');
+            } else {
+                await API.post('/admin/appointments', manualForm);
+                toast.success('Kayıt oluşturuldu');
+            }
             setShowModal(false);
-            setManualForm({ customerName: '', phone: '', date: '', hour: '' });
+            setManualForm({ customerName: '', phone: '', date: '', hour: '', notes: '', barberId: '' });
             fetchAppointments();
-        } catch (error) { toast.error('Hata oluştu'); }
+        } catch (error) { toast.error('İşlem başarısız: ' + (error.response?.data?.error || error.message)); }
+    };
+
+    const handleShowHistory = async (phone) => {
+        if (!phone || phone === '0000000000') return;
+        setHistoryLoading(true);
+        setShowHistoryModal(true);
+        try {
+            const res = await API.get(`/admin/appointments/search?q=${phone}`);
+            setHistoryData(res.data);
+        } catch (e) { toast.error('Geçmiş yüklenemedi'); }
+        finally { setHistoryLoading(false); }
     };
 
     const handleStatusUpdate = async (id, status) => {
@@ -454,12 +546,26 @@ const AppointmentsManager = () => {
                 </div>
 
                 <div className="flex gap-2">
-                    <button onClick={() => setViewMode('list')} className={`px-4 py-2 rounded-lg text-xs md:text-sm font-bold uppercase tracking-wide ${viewMode === 'list' ? 'bg-white/10 text-white' : 'text-gray-400 bg-white/5'}`}>Liste</button>
-                    <button onClick={() => setViewMode('calendar')} className={`px-4 py-2 rounded-lg text-xs md:text-sm font-bold uppercase tracking-wide ${viewMode === 'calendar' ? 'bg-white/10 text-white' : 'text-gray-400 bg-white/5'}`}>Takvim</button>
+                    {/* Barber Filter */}
+                    <select
+                        value={selectedBarber}
+                        onChange={(e) => setSelectedBarber(e.target.value)}
+                        className="bg-dark-950/50 text-white text-sm border border-white/10 rounded-lg px-3 py-2 outline-none focus:border-gold-500"
+                    >
+                        <option value="">Tüm Personel</option>
+                        {barbers.map(b => (
+                            <option key={b._id} value={b._id}>{b.name}</option>
+                        ))}
+                    </select>
                 </div>
-                <button onClick={() => setShowModal(true)} className="flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg transition-all">
-                    <IconPlus /> Randevu Ekle
-                </button>
+                <div className="flex gap-2">
+                    <button onClick={openBlockModal} className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg transition-all">
+                        ⛔ Saat Kapat
+                    </button>
+                    <button onClick={openCreateModal} className="flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg transition-all">
+                        <IconPlus /> Randevu Ekle
+                    </button>
+                </div>
             </div>
 
             {/* List View */}
@@ -483,7 +589,12 @@ const AppointmentsManager = () => {
                                         <div className="text-gold-500 text-xs">{app.hour}</div>
                                     </td>
                                     <td className="p-4 md:p-6">
-                                        <div className="text-white">{app.customerName}</div>
+                                        <button
+                                            onClick={() => handleShowHistory(app.phone)}
+                                            className="text-white hover:text-gold-400 font-bold underline decoration-dotted underline-offset-4 transition-colors text-left"
+                                        >
+                                            {app.customerName}
+                                        </button>
                                         <div className="text-gray-500 text-xs">{app.phone}</div>
                                     </td>
                                     <td className="p-4 md:p-6 hidden md:table-cell text-gray-400">{app.serviceId || 'Standart'}</td>
@@ -499,6 +610,16 @@ const AppointmentsManager = () => {
                                             {app.status === 'pending' && (
                                                 <button onClick={() => handleStatusUpdate(app._id || app.id, 'confirmed')} className="p-1 bg-green-500/20 text-green-400 rounded hover:bg-green-500 hover:text-dark-950">✓</button>
                                             )}
+                                            <button
+                                                onClick={() => openEditModal(app)}
+                                                className="p-1 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500 hover:text-white"
+                                                title="Düzenle"
+                                            >
+                                                ✏️
+                                            </button>
+                                            {app.status === 'pending' && (
+                                                <button onClick={() => handleStatusUpdate(app._id || app.id, 'confirmed')} className="p-1 bg-green-500/20 text-green-400 rounded hover:bg-green-500 hover:text-dark-950">✓</button>
+                                            )}
                                             <button onClick={() => handleDelete(app._id || app.id)} className="p-1 bg-red-500/20 text-red-400 rounded hover:bg-red-500 hover:text-white">✕</button>
                                         </div>
                                     </td>
@@ -509,26 +630,88 @@ const AppointmentsManager = () => {
                 </div>
             )}
 
-            {/* Simple Calendar Placeholder if needed, or reuse previous logic */}
-            {viewMode === 'calendar' && (
-                <div className="p-8 text-center text-gray-500">Takvim görünümü şu an bakımda.</div>
+
+            {/* Manual/Block/Edit Modal */}
+            {/* Manual/Block/Edit Modal */}
+            {showModal && createPortal(
+                <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
+                    <div className="bg-[#1a1a1a] border border-white/20 p-6 md:p-8 rounded-2xl w-full max-w-md relative shadow-2xl">
+                        <button onClick={() => setShowModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white bg-white/5 p-2 rounded-full"><IconX /></button>
+                        <h3 className="text-xl font-serif text-white mb-6">
+                            {manualForm.customerName === 'KAPALI' ? '⛔ Saat Kapat (Mola)' : isEditMode ? '✏️ Randevu Düzenle' : '➕ Yeni Randevu'}
+                        </h3>
+                        <form onSubmit={handleSave} className="space-y-4">
+                            {manualForm.customerName !== 'KAPALI' && (
+                                <>
+                                    <input required placeholder="Ad Soyad" className="w-full bg-white/10 border border-white/20 p-3 rounded text-white placeholder-gray-500 focus:border-gold-500 outline-none transition-colors" value={manualForm.customerName} onChange={e => setManualForm({ ...manualForm, customerName: e.target.value })} />
+                                    <input required placeholder="Telefon" className="w-full bg-white/10 border border-white/20 p-3 rounded text-white placeholder-gray-500 focus:border-gold-500 outline-none transition-colors" value={manualForm.phone} onChange={e => setManualForm({ ...manualForm, phone: e.target.value })} />
+
+                                    <div>
+                                        <select
+                                            value={manualForm.barberId || ''}
+                                            onChange={e => {
+                                                const b = barbers.find(bar => bar._id === e.target.value);
+                                                setManualForm({ ...manualForm, barberId: e.target.value, barberName: b ? b.name : '' });
+                                            }}
+                                            className="w-full bg-white/10 border border-white/20 p-3 rounded text-white outline-none focus:border-gold-500"
+                                        >
+                                            <option value="">Personel Seçiniz (Opsiyonel)</option>
+                                            {barbers.map(b => (
+                                                <option key={b._id} value={b._id}>{b.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </>
+                            )}
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs text-gray-400 mb-1 block pl-1">Tarih</label>
+                                    <input type="date" required className="w-full bg-white/10 border border-white/20 p-3 rounded text-white focus:border-gold-500 outline-none transition-colors" value={manualForm.date} onChange={e => setManualForm({ ...manualForm, date: e.target.value })} />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-gray-400 mb-1 block pl-1">Saat</label>
+                                    <input type="time" required className="w-full bg-white/10 border border-white/20 p-3 rounded text-white focus:border-gold-500 outline-none transition-colors" value={manualForm.hour} onChange={e => setManualForm({ ...manualForm, hour: e.target.value })} />
+                                </div>
+                            </div>
+
+                            <textarea placeholder="Notlar (Opsiyonel)" rows="3" className="w-full bg-white/10 border border-white/20 p-3 rounded text-white placeholder-gray-500 focus:border-gold-500 outline-none transition-colors" value={manualForm.notes || ''} onChange={e => setManualForm({ ...manualForm, notes: e.target.value })} />
+
+                            <button type="submit" className={`w-full font-bold py-3.5 rounded-xl shadow-lg transition-transform hover:scale-[1.02] active:scale-95 ${manualForm.customerName === 'KAPALI' ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-gold-500 text-dark-950 hover:bg-gold-400'}`}>
+                                {manualForm.customerName === 'KAPALI' ? 'Bu Saati Kapat' : 'Kaydet'}
+                            </button>
+                        </form>
+                    </div>
+                </div>,
+                document.body
             )}
 
-            {/* Manual Booking Modal */}
-            {showModal && (
+            {/* History Modal */}
+            {showHistoryModal && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-dark-900 border border-white/10 p-6 md:p-8 rounded-2xl w-full max-w-md relative">
-                        <button onClick={() => setShowModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white"><IconX /></button>
-                        <h3 className="text-xl font-serif text-white mb-6">Yeni Randevu Oluştur</h3>
-                        <form onSubmit={handleCreate} className="space-y-4">
-                            <input required placeholder="Ad Soyad" className="w-full bg-white/5 border border-white/10 p-3 rounded text-white" value={manualForm.customerName} onChange={e => setManualForm({ ...manualForm, customerName: e.target.value })} />
-                            <input required placeholder="Telefon" className="w-full bg-white/5 border border-white/10 p-3 rounded text-white" value={manualForm.phone} onChange={e => setManualForm({ ...manualForm, phone: e.target.value })} />
-                            <div className="grid grid-cols-2 gap-4">
-                                <input type="date" required className="bg-white/5 border border-white/10 p-3 rounded text-white" value={manualForm.date} onChange={e => setManualForm({ ...manualForm, date: e.target.value })} />
-                                <input type="time" required className="bg-white/5 border border-white/10 p-3 rounded text-white" value={manualForm.hour} onChange={e => setManualForm({ ...manualForm, hour: e.target.value })} />
+                    <div className="bg-dark-900 border border-white/10 p-6 md:p-8 rounded-2xl w-full max-w-2xl relative max-h-[80vh] flex flex-col">
+                        <button onClick={() => setShowHistoryModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white"><IconX /></button>
+                        <h3 className="text-xl font-serif text-white mb-4">Müşteri Geçmişi</h3>
+
+                        {historyLoading ? (
+                            <div className="text-center py-8 text-gray-500">Yükleniyor...</div>
+                        ) : historyData.length === 0 ? (
+                            <div className="text-center py-8 text-gray-500">Kayıt bulunamadı.</div>
+                        ) : (
+                            <div className="overflow-y-auto flex-1 space-y-2">
+                                {historyData.map(h => (
+                                    <div key={h._id} className="bg-white/5 p-3 rounded-lg border border-white/5 flex justify-between items-center">
+                                        <div>
+                                            <p className="font-bold text-white">{h.date} - {h.hour}</p>
+                                            <p className="text-sm text-gray-400">{h.serviceName || 'Hizmet'}</p>
+                                        </div>
+                                        <div className={`text-xs px-2 py-1 rounded ${h.status === 'confirmed' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                                            {h.status}
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
-                            <button type="submit" className="w-full bg-gold-500 text-dark-950 font-bold py-3 rounded hover:bg-white transition-colors">Oluştur</button>
-                        </form>
+                        )}
                     </div>
                 </div>
             )}
@@ -595,6 +778,197 @@ const BroadcastManager = () => {
                     </button>
                 </form>
             </div>
+        </div>
+    );
+};
+
+const StaffManager = () => {
+    const [staff, setStaff] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
+    const [editingId, setEditingId] = useState(null);
+    const [formData, setFormData] = useState({ username: '', password: '', name: '', role: 'BARBER', color: '#D4AF37' });
+
+    useEffect(() => {
+        fetchStaff();
+    }, []);
+
+    const fetchStaff = async () => {
+        try {
+            const res = await API.get('/admin/staff');
+            setStaff(res.data);
+        } catch (error) {
+            toast.error('Personel listesi yüklenemedi');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        try {
+            if (editingId) {
+                await API.put(`/admin/staff/${editingId}`, formData);
+                toast.success('Personel güncellendi ✅');
+            } else {
+                await API.post('/admin/staff', formData);
+                toast.success('Personel eklendi ✅');
+            }
+
+            setShowModal(false);
+            setEditingId(null);
+            setFormData({ username: '', password: '', name: '', role: 'BARBER', color: '#D4AF37' });
+            fetchStaff();
+        } catch (error) {
+            toast.error(error.response?.data?.error || 'İşlem başarısız');
+        }
+    };
+
+    const handleEdit = (user) => {
+        setEditingId(user._id);
+        setFormData({
+            username: user.username,
+            password: '', // Leave empty to keep unchanged
+            name: user.name,
+            role: user.role,
+            color: user.color || '#D4AF37'
+        });
+        setShowModal(true);
+    };
+
+    const handleToggleStatus = async (user) => {
+        try {
+            await API.put(`/admin/staff/${user._id}`, { isActive: !user.isActive });
+            toast.success(`Durum güncellendi: ${!user.isActive ? 'Aktif' : 'Pasif'}`);
+            fetchStaff();
+        } catch (error) {
+            toast.error('Güncelleme başarısız');
+        }
+    };
+
+    const handleDelete = async (id) => {
+        if (!window.confirm('Bu personeli silmek istediğinize emin misiniz?')) return;
+        try {
+            await API.delete(`/admin/staff/${id}`);
+            toast.success('Personel silindi');
+            fetchStaff();
+        } catch (error) {
+            toast.error('Silinemedi');
+        }
+    };
+
+    const openCreateModal = () => {
+        setEditingId(null);
+        setFormData({ username: '', password: '', name: '', role: 'BARBER', color: '#D4AF37' });
+        setShowModal(true);
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center bg-white/5 p-6 rounded-2xl border border-white/10 backdrop-blur-xl">
+                <div>
+                    <h2 className="text-2xl font-serif text-white flex items-center gap-3">
+                        <span className="p-2 bg-purple-500/20 rounded-lg text-purple-400"><IconUsers /></span>
+                        Personel Listesi
+                    </h2>
+                    <p className="text-gray-400 text-sm mt-1">Sisteme giriş yapabilecek personelleri yönetin.</p>
+                </div>
+                <button
+                    type="button"
+                    onClick={openCreateModal}
+                    className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white px-6 py-3 rounded-xl text-sm font-bold shadow-lg transition-all hover:scale-[1.02] cursor-pointer relative z-50"
+                >
+                    <IconPlus /> Yeni Personel Ekle
+                </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {staff.map(user => (
+                    <div key={user._id} className={`bg-white/5 border rounded-2xl p-6 relative group transition-all ${user.isActive ? 'border-white/10 hover:border-white/20' : 'border-red-500/20 opacity-70'}`}>
+                        <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold bg-dark-950 border border-white/10" style={{ color: user.color }}>
+                                    {user.name.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                    <h3 className="text-white font-bold text-lg">{user.name}</h3>
+                                    <p className="text-gray-500 text-xs">@{user.username}</p>
+                                    {!user.isActive && <span className="text-red-400 text-[10px] uppercase font-bold border border-red-500/30 px-1 rounded ml-1">Pasif</span>}
+                                </div>
+                            </div>
+                            <div className="flex gap-1">
+                                <button onClick={() => handleEdit(user)} className="text-blue-400 hover:text-blue-300 p-2 rounded-lg hover:bg-white/5 transition-colors" title="Düzenle">
+                                    ✏️
+                                </button>
+                                <button onClick={() => handleDelete(user._id)} className="text-gray-600 hover:text-red-400 p-2 rounded-lg hover:bg-white/5 transition-colors" title="Sil">
+                                    <IconX />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between mt-4">
+                            <div className="flex items-center gap-2">
+                                <span className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider ${user.role === 'ADMIN' ? 'bg-gold-500/20 text-gold-500' : 'bg-blue-500/20 text-blue-400'}`}>
+                                    {user.role}
+                                </span>
+                                <div className="w-6 h-6 rounded-full border border-white/10" style={{ backgroundColor: user.color }}></div>
+                            </div>
+
+                            <button
+                                onClick={() => handleToggleStatus(user)}
+                                className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase transition-colors ${user.isActive ? 'bg-green-500/10 text-green-400 hover:bg-red-500/10 hover:text-red-400' : 'bg-red-500/10 text-red-400 hover:bg-green-500/10 hover:text-green-400'}`}
+                            >
+                                {user.isActive ? 'Aktif' : 'Pasif Yap'}
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {showModal && createPortal(
+                <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
+                    <motion.div
+                        initial={{ scale: 0.9, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="bg-dark-900 border border-white/20 p-8 rounded-2xl w-full max-w-md relative shadow-2xl"
+                    >
+                        <button type="button" onClick={() => setShowModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white"><IconX /></button>
+                        <h3 className="text-xl font-serif text-white mb-6">{editingId ? 'Personeli Düzenle' : 'Yeni Personel Ekle'}</h3>
+
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="text-xs text-gray-400 mb-1 block pl-1">Ad Soyad (Görünen İsim)</label>
+                                <input required type="text" className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-white outline-none focus:border-purple-500 transition-colors" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                            </div>
+                            <div>
+                                <label className="text-xs text-gray-400 mb-1 block pl-1">Kullanıcı Adı (Giriş İçin)</label>
+                                <input required type="text" className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-white outline-none focus:border-purple-500 transition-colors" value={formData.username} onChange={e => setFormData({ ...formData, username: e.target.value })} />
+                            </div>
+                            <div>
+                                <label className="text-xs text-gray-400 mb-1 block pl-1">Şifre {editingId && '(Değiştirmek için doldurun)'}</label>
+                                <input {...(!editingId && { required: true })} type="password" className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-white outline-none focus:border-purple-500 transition-colors" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} placeholder={editingId ? '******' : ''} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs text-gray-400 mb-1 block pl-1">Rol</label>
+                                    <select className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-white outline-none focus:border-purple-500" value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value })}>
+                                        <option className="bg-dark-950 text-white" value="BARBER">Berber</option>
+                                        <option className="bg-dark-950 text-white" value="ADMIN">Yönetici</option>
+                                        <option className="bg-dark-950 text-white" value="STAFF">Personel</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-xs text-gray-400 mb-1 block pl-1">Renk</label>
+                                    <input type="color" className="w-full h-[46px] bg-transparent border-0 cursor-pointer" value={formData.color} onChange={e => setFormData({ ...formData, color: e.target.value })} />
+                                </div>
+                            </div>
+                            <button type="submit" className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl mt-4 transition-colors">
+                                {editingId ? 'Güncelle' : 'Oluştur'}
+                            </button>
+                        </form>
+                    </motion.div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 };
@@ -820,6 +1194,80 @@ const SettingsManager = () => {
     );
 };
 
+const ComplaintsManager = () => {
+    const [complaints, setComplaints] = useState([]);
+    const [loading, setLoading] = useState(true);
 
+    const fetchComplaints = async () => {
+        try {
+            const res = await API.get('/complaints');
+            setComplaints(res.data);
+        } catch (e) { toast.error('Şikayetler yüklenemedi'); }
+        finally { setLoading(false); }
+    };
+
+    useEffect(() => { fetchComplaints(); }, []);
+
+    const handleResolve = async (id) => {
+        try {
+            await API.patch(`/complaints/${id}/resolve`);
+            toast.success('Şikayet çözüldü olarak işaretlendi');
+            fetchComplaints();
+        } catch (e) { toast.error('İşlem başarısız'); }
+    };
+
+    const handleDelete = async (id) => {
+        if (!window.confirm('Bu kaydı silmek istiyor musunuz?')) return;
+        try {
+            await API.delete(`/complaints/${id}`);
+            toast.success('Silindi');
+            fetchComplaints();
+        } catch (e) { toast.error('Silinemedi'); }
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="h-full overflow-y-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {loading ? <div className="text-white">Yükleniyor...</div> : complaints.length === 0 ? (
+                        <div className="col-span-full text-center py-12 text-gray-500 bg-white/5 rounded-2xl border border-white/10">
+                            <p className="text-lg">Henüz şikayet veya talep bulunmuyor. 🎉</p>
+                        </div>
+                    ) : (
+                        complaints.map(item => (
+                            <div key={item._id} className={`p-6 rounded-2xl border ${item.status === 'resolved' ? 'bg-green-500/5 border-green-500/20' : 'bg-red-500/5 border-red-500/20'} relative group`}>
+                                <div className="flex justify-between items-start mb-4">
+                                    <div>
+                                        <h4 className="text-white font-bold">{item.customerName}</h4>
+                                        <p className="text-sm text-gray-400">{item.phone}</p>
+                                    </div>
+                                    <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold ${item.status === 'resolved' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                                        {item.status === 'resolved' ? 'Çözüldü' : 'Bekliyor'}
+                                    </span>
+                                </div>
+                                <p className="text-gray-300 text-sm mb-6 bg-dark-950/30 p-3 rounded-lg border border-white/5">
+                                    "{item.message}"
+                                </p>
+                                <div className="flex justify-between items-center text-xs text-gray-500 border-t border-white/5 pt-4">
+                                    <span>{new Date(item.createdAt).toLocaleString('tr-TR')}</span>
+                                    <div className="flex gap-2">
+                                        {item.status !== 'resolved' && (
+                                            <button onClick={() => handleResolve(item._id)} className="text-green-400 hover:text-green-300 font-bold transition-colors">
+                                                ✓ Çözüldü
+                                            </button>
+                                        )}
+                                        <button onClick={() => handleDelete(item._id)} className="text-red-400 hover:text-red-300 ml-2 transition-colors">
+                                            Sil
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
 
 export default AdminDashboard;

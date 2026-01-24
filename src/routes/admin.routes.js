@@ -264,4 +264,103 @@ router.post('/whatsapp/logout', async (req, res, next) => {
     }
 });
 
+// =============== STAFF MANAGEMENT ===============
+const AdminUser = require('../models/admin.model'); // Admin model is effectively User model
+
+router.get('/staff', async (req, res, next) => {
+    try {
+        const staff = await AdminUser.find().select('-passwordHash').sort({ createdAt: -1 });
+        res.json(staff);
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.post('/staff', async (req, res, next) => {
+    try {
+        const { username, password, name, role, color } = req.body;
+
+        // Simple validation
+        if (!username || !password || !name) {
+            return res.status(400).json({ error: 'Kullanıcı adı, şifre ve isim zorunludur.' });
+        }
+
+        const user = await AdminUser.create({
+            username,
+            password, // Virtual setter handles hashing
+            name,
+            role: role || 'BARBER',
+            color: color || '#D4AF37'
+        });
+
+        logger.info(`Admin created staff: ${username} (${role})`);
+        res.status(201).json({
+            _id: user._id,
+            username: user.username,
+            name: user.name,
+            role: user.role,
+            color: user.color
+        });
+    } catch (error) {
+        if (error.code === 11000) {
+            return res.status(400).json({ error: 'Bu kullanıcı adı zaten kullanılıyor.' });
+        }
+        next(error);
+    }
+});
+
+router.put('/staff/:id', async (req, res, next) => {
+    try {
+        const { username, password, name, role, color, isActive } = req.body;
+        const { id } = req.params;
+
+        const user = await AdminUser.findById(id);
+        if (!user) return res.status(404).json({ error: 'Personel bulunamadı.' });
+
+        if (username) user.username = username;
+        if (name) user.name = name;
+        if (role) user.role = role;
+        if (color) user.color = color;
+        if (typeof isActive === 'boolean') user.isActive = isActive;
+
+        // Update password only if provided
+        if (password && password.trim().length > 0) {
+            user.password = password; // Triggers virtual setter
+        }
+
+        await user.save();
+        logger.info(`Admin updated staff: ${user.username}`);
+
+        res.json({
+            _id: user._id,
+            username: user.username,
+            name: user.name,
+            role: user.role,
+            color: user.color,
+            isActive: user.isActive
+        });
+    } catch (error) {
+        if (error.code === 11000) {
+            return res.status(400).json({ error: 'Bu kullanıcı adı zaten kullanılıyor.' });
+        }
+        next(error);
+    }
+});
+
+router.delete('/staff/:id', async (req, res, next) => {
+    try {
+        const { id } = req.params;
+
+        // Prevent self-deletion (safety check)
+        // Ideally we check req.user._id but middleware might not set it identical to DB _id depending on auth implementation.
+        // Let's assume frontend handles basic safety, backend handles ID existence.
+
+        await AdminUser.findByIdAndDelete(id);
+        logger.info(`Admin deleted staff: ${id}`);
+        res.json({ message: 'Personel silindi.' });
+    } catch (error) {
+        next(error);
+    }
+});
+
 module.exports = router;

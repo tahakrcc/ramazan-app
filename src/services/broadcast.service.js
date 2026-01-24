@@ -34,8 +34,9 @@ const sendBroadcast = async (message, filter = 'all') => {
 
     for (const phone of phones) {
         try {
-            // 2-5 seconds random delay to prevent spam detection
-            const delay = Math.floor(Math.random() * 3000) + 2000;
+            // ULTRA SAFE MODE: 10-25 seconds random delay
+            // This mimics real human behavior (~3-4 messages per minute)
+            const delay = Math.floor(Math.random() * 15000) + 10000;
             await sleep(delay);
 
             const chatId = `${phone.replace('+', '')}@c.us`;

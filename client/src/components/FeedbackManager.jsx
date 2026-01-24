@@ -24,7 +24,7 @@ const FeedbackManager = () => {
 
     const handleApprove = async (id, currentStatus) => {
         try {
-            await API.put(`/admin/feedbacks/${id}`, { isApproved: !currentStatus });
+            await API.put(`/feedbacks/${id}`, { isApproved: !currentStatus });
             toast.success(currentStatus ? 'Onay kaldırıldı' : 'Yorum onaylandı');
             fetchFeedbacks();
         } catch (error) {
@@ -35,7 +35,7 @@ const FeedbackManager = () => {
     const handleDelete = async (id) => {
         if (!window.confirm('Bu yorumu silmek istediğinize emin misiniz?')) return;
         try {
-            await API.delete(`/admin/feedbacks/${id}`);
+            await API.delete(`/feedbacks/${id}`);
             toast.success('Yorum silindi');
             fetchFeedbacks();
         } catch (error) {
@@ -51,7 +51,52 @@ const FeedbackManager = () => {
                 <h3 className="text-xl font-serif text-white">Müşteri Yorumları</h3>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Mobile View (Cards) */}
+            <div className="md:hidden space-y-4 p-4">
+                {feedbacks.length === 0 && (
+                    <div className="text-center text-gray-400 py-8">Henüz yorum yok.</div>
+                )}
+                {feedbacks.map(f => (
+                    <div key={f._id} className="bg-dark-950/40 border border-white/5 rounded-xl p-4 flex flex-col gap-3">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h3 className="text-white font-bold">{f.customerName}</h3>
+                                <span className="text-xs text-gray-500">{new Date(f.createdAt).toLocaleDateString('tr-TR')}</span>
+                            </div>
+                            <span className={`px-2 py-1 rounded text-xs font-bold ${f.isApproved ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                                {f.isApproved ? 'Yayında' : 'Bekliyor'}
+                            </span>
+                        </div>
+
+                        <div className="flex text-gold-500">
+                            {'★'.repeat(f.rating)}
+                            <span className="text-gray-600 ml-1 opacity-50">{'★'.repeat(5 - f.rating)}</span>
+                        </div>
+
+                        <p className="text-gray-300 text-sm bg-white/5 p-3 rounded-lg italic">
+                            "{f.comment}"
+                        </p>
+
+                        <div className="flex gap-2 pt-2 border-t border-white/5">
+                            <button
+                                onClick={() => handleApprove(f._id, f.isApproved)}
+                                className={`flex-1 py-2 rounded-lg font-bold text-sm flex items-center justify-center gap-2 ${f.isApproved ? 'bg-yellow-500/10 text-yellow-500' : 'bg-green-500/10 text-green-400'}`}
+                            >
+                                {f.isApproved ? <><X size={16} /> Yayından Kaldır</> : <><Check size={16} /> Onayla</>}
+                            </button>
+                            <button
+                                onClick={() => handleDelete(f._id)}
+                                className="p-2 bg-red-500/10 text-red-400 rounded-lg"
+                            >
+                                <Trash2 size={18} />
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Desktop View (Table) */}
+            <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left">
                     <thead className="bg-white/5 text-gray-400 text-xs uppercase tracking-wider">
                         <tr>

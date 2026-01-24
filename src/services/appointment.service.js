@@ -28,7 +28,7 @@ const generateSlots = (start, end) => {
  * @param {string} date - YYYY-MM-DD
  * @returns {Promise<string[]>}
  */
-const getAvailableSlots = async (date) => {
+const getAvailableSlots = async (date, barberId) => {
     // 1. Check if Closed Date
     const isClosed = await ClosedDate.findOne({ date });
     if (isClosed) {
@@ -39,10 +39,20 @@ const getAvailableSlots = async (date) => {
     const { start, end } = await getBusinessHours();
     const allSlots = generateSlots(start, end);
 
-    const bookedAppointments = await Appointment.find({
+    // Build query
+    const query = {
         date: date,
         status: 'confirmed'
-    }).select('hour');
+    };
+
+    // If a specific barber is selected, check ONLY their schedule
+    if (barberId) {
+        query.barberId = barberId;
+    }
+    // If no barber selected (Legacy), we check ALL appointments to be safe
+    // Or we could say "Any barber free?" but for now let's keep conservative.
+
+    const bookedAppointments = await Appointment.find(query).select('hour');
 
     const bookedHours = bookedAppointments.map(app => app.hour);
     const availableSlots = allSlots.filter(slot => !bookedHours.includes(slot));
@@ -52,7 +62,7 @@ const getAvailableSlots = async (date) => {
 
 /**
  * Create a new appointment
- * @param {Object} data - { customerName, phone, date, hour, service, createdFrom }
+ * @param {Object} data - { customerName, phone, date, hour, service, createdFrom, barberId, barberName }
  * @returns {Promise<Object>}
  */
 const createAppointment = async (data) => {
@@ -67,6 +77,27 @@ const createAppointment = async (data) => {
         throw new Error(`Seçilen tarih (${data.date}) işletmemiz kapalıdır: ${isClosed.reason}`);
     }
 
+    // Manual Conflict Check (Multi-Barber Support)
+    // We cannot rely solely on unique index anymore because multiple barbers can have same slot
+    const conflictQuery = {
+        date: data.date,
+        hour: data.hour,
+        status: 'confirmed'
+    };
+    if (data.barberId) {
+        conflictQuery.barberId = data.barberId;
+    } else {
+        // Legacy: If no barber specified, global lock? 
+        // Or assume it's for the "default" admin?
+        // Let's assume conflict if ANYone is booked to be safe, or allow if we want overlapping.
+        // For safety, if no barberId, we assume single-resource mode.
+    }
+
+    const existing = await Appointment.findOne(conflictQuery);
+    if (existing) {
+        throw new Error('Bu saat maalesef dolu. Lütfen başka bir saat seçin.');
+    }
+
     try {
         const appointment = new Appointment({
             customerName: data.customerName,
@@ -75,16 +106,21 @@ const createAppointment = async (data) => {
             hour: data.hour,
             service: data.service || 'sac',
             createdFrom: data.createdFrom,
-            status: 'confirmed'
+            status: 'confirmed',
+            barberId: data.barberId,      // New Field
+            barberName: data.barberName   // New Field
         });
 
         const savedAppointment = await appointment.save();
-        logger.info(`Appointment created: ${savedAppointment._id} for ${data.phone}`);
+        logger.info(`Appointment created: ${savedAppointment._id} for ${data.phone} (Barber: ${data.barberName})`);
 
         // Send WhatsApp Notification
         try {
             const whatsappService = require('./whatsapp.service');
-            const message = `Sayın ${data.customerName},\n${data.date} tarihinde saat ${data.hour} için randevunuz oluşturulmuştur.\nBizi tercih ettiğiniz için teşekkür ederiz.`;
+            let message = `Sayın ${data.customerName},\n${data.date} tarihinde saat ${data.hour} için randevunuz oluşturulmuştur.\n`;
+            if (data.barberName) message += `Berber: ${data.barberName}\n`;
+            message += `Bizi tercih ettiğiniz için teşekkür ederiz.`;
+
             // Use clean phone, let service handle formatting
             await whatsappService.sendMessage(data.phone, message);
         } catch (waError) {
@@ -95,7 +131,7 @@ const createAppointment = async (data) => {
 
     } catch (error) {
         if (error.code === 11000) {
-            logger.warn(`Race condition caught: Slot ${data.date} ${data.hour} is already taken.`);
+            // Fallback for race condition
             throw new Error('Bu saat maalesef dolu. Lütfen başka bir saat seçin.');
         }
         throw error;

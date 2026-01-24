@@ -12,10 +12,23 @@ const adminSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    name: {
+        type: String,
+        required: true,
+        default: 'Admin' // Default for existing docs
+    },
     role: {
         type: String,
-        enum: ['ADMIN'],
+        enum: ['ADMIN', 'BARBER', 'STAFF'],
         default: 'ADMIN'
+    },
+    color: {
+        type: String,
+        default: '#D4AF37' // Default Gold
+    },
+    isActive: {
+        type: Boolean,
+        default: true
     }
 }, {
     timestamps: true

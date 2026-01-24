@@ -112,8 +112,36 @@ const ServicesManager = () => {
                     </div>
                 </div>
 
-                {/* Table */}
-                <div className="overflow-x-auto">
+                {/* Mobile View (Cards) - No Horizontal Scroll */}
+                <div className="md:hidden space-y-3 p-4">
+                    {loading ? (
+                        <div className="text-center text-gray-400 py-8">Yükleniyor...</div>
+                    ) : filteredServices.length === 0 ? (
+                        <div className="text-center text-gray-400 py-8">Hizmet bulunamadı.</div>
+                    ) : (
+                        filteredServices.map(s => (
+                            <div key={s.id} className="bg-dark-950/40 border border-white/5 rounded-xl p-4 flex flex-col gap-3 relative overflow-hidden group">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <h3 className="text-white font-bold text-lg">{s.name}</h3>
+                                        <span className="text-xs text-gray-500 font-mono">{s.id}</span>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => handleEdit(s)} className="p-2 bg-blue-500/10 text-blue-400 rounded-lg"><Edit2 size={16} /></button>
+                                        <button onClick={() => handleDelete(s._id)} className="p-2 bg-red-500/10 text-red-400 rounded-lg"><Trash2 size={16} /></button>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3 mt-1">
+                                    <span className="px-3 py-1 bg-gold-500/10 text-gold-500 rounded-lg text-sm font-bold border border-gold-500/20">{s.price}₺</span>
+                                    <span className="text-gray-400 text-sm flex items-center gap-1"><span className="w-1 h-1 bg-gray-500 rounded-full"></span> {s.duration} dk</span>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+
+                {/* Desktop View (Table) */}
+                <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-left">
                         <thead className="bg-white/5 text-gray-400 text-[10px] md:text-xs uppercase tracking-wider">
                             <tr>

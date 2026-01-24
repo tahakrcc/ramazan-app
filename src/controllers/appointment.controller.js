@@ -14,7 +14,9 @@ const createSchema = Joi.object({
     hour: Joi.string().pattern(/^\d{2}:00$/).required().messages({
         'string.pattern.base': 'Saat formatı: HH:00 olmalı'
     }),
-    service: Joi.string().required() // Dynamic service ID validation would be better but string is enough for now
+    service: Joi.string().required(), // Dynamic service ID validation would be better but string is enough for now
+    barberId: Joi.string().allow('', null), // Optional Barber ID
+    barberName: Joi.string().allow('', null) // Optional Barber Name
 });
 
 const getServices = async (req, res, next) => {
@@ -29,7 +31,7 @@ const getServices = async (req, res, next) => {
 
 const getAvailable = async (req, res, next) => {
     try {
-        const { date } = req.query;
+        const { date, barberId } = req.query; // Extract barberId
         if (!date) {
             return res.status(400).json({ error: 'Date parameter is required (YYYY-MM-DD)' });
         }
@@ -39,7 +41,8 @@ const getAvailable = async (req, res, next) => {
             return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
         }
 
-        const slots = await appointmentService.getAvailableSlots(date);
+        // Pass barberId to service
+        const slots = await appointmentService.getAvailableSlots(date, barberId);
         res.json({ date, availableSlots: slots });
     } catch (error) {
         next(error);
@@ -141,10 +144,26 @@ const cancel = async (req, res, next) => {
     }
 }
 
+const getBarbers = async (req, res, next) => {
+    try {
+        const Admin = require('../models/admin.model');
+        // Fetch only active barbers/staff, excluding pure admins if needed, 
+        // but typically all who can take appointments.
+        const barbers = await Admin.find({
+            isActive: true,
+            role: { $in: ['BARBER', 'STAFF', 'ADMIN'] }
+        }).select('name role color _id');
+        res.json(barbers);
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     getAvailable,
     create,
     getMy,
     cancel,
-    getServices
+    getServices,
+    getBarbers
 };

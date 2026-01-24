@@ -27,6 +27,15 @@ const appointmentSchema = new mongoose.Schema({
     required: true,
     default: 'Haircut'
   },
+  barberId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Admin',
+    default: null
+  },
+  barberName: {
+    type: String,
+    trim: true
+  },
   status: {
     type: String,
     enum: ['confirmed', 'cancelled'],
@@ -55,9 +64,14 @@ const appointmentSchema = new mongoose.Schema({
 });
 
 // ZERO-TOLERANCE UNIQUE INDEX
-// Creates a compound unique index on date and hour.
-// If two requests try to book the same slot, MongoDB will reject one with code 11000.
-appointmentSchema.index({ date: 1, hour: 1 }, { unique: true });
+// Creates a compound unique index on date, hour and barber.
+// If two requests try to book the same slot for the same barber, MongoDB will reject.
+appointmentSchema.index({ date: 1, hour: 1, barberId: 1 }, { unique: true });
+
+// Try to drop old index (Best effort, runs once on module load? No, models load on startup)
+// We rely on Mongoose sync or manual migration.
+// If this causes issues, user might need to drop index manually.
+// appointmentSchema.add({ barberId: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' } });
 
 const Appointment = mongoose.model('Appointment', appointmentSchema);
 

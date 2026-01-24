@@ -42,7 +42,7 @@ const getAppointments = async (req, res, next) => {
         // Trigger cleanup (fire & forget)
         appointmentService.cleanupOldAppointments().catch(err => logger.error('Cleanup failed', err));
 
-        const { date, startDate, endDate, view } = req.query;
+        const { date, startDate, endDate, view, barberId } = req.query;
         let query = {};
 
         const today = new Date().toISOString().split('T')[0];
@@ -71,6 +71,11 @@ const getAppointments = async (req, res, next) => {
             }
         }
 
+        // Filter by Barber if requested
+        if (barberId) {
+            query.barberId = barberId;
+        }
+
 
         const appointments = await Appointment.find(query).sort({ date: 1, hour: 1 });
         res.json(appointments);
@@ -84,7 +89,7 @@ const createAppointment = async (req, res, next) => {
         // Admin can force create? Maybe still respect unique constraint to avoid double booking
         // Or maybe admin creation has looser validation (e.g. past dates?)
         // For now, let's reuse standard logic but allow specifying fields
-        const { customerName, phone, date, hour } = req.body;
+        const { customerName, phone, date, hour, barberId, barberName } = req.body;
 
         const appointment = new Appointment({
             customerName,
@@ -93,7 +98,9 @@ const createAppointment = async (req, res, next) => {
             hour,
             service: 'Admin Created',
             createdFrom: 'admin',
-            status: 'confirmed'
+            status: 'confirmed',
+            barberId,
+            barberName
         });
 
         const savedCallback = await appointment.save();
