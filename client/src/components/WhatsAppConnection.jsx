@@ -5,35 +5,21 @@ import API from '../utils/api';
 const WP_SERVICE_URL = import.meta.env.VITE_WP_SERVICE_URL;
 const WP_API_KEY = import.meta.env.VITE_WP_API_KEY;
 
-// Harici servise istek at
 const wpFetch = async (endpoint, options = {}) => {
-    console.log(`[WhatsAppConnection] Requesting: ${endpoint}`, options);
-    // Eğer harici servis tanımlıysa onu kullan, yoksa ana API'yi kullan
-    if (WP_SERVICE_URL) {
-        console.log(`[WhatsAppConnection] Using External Service: ${WP_SERVICE_URL}`);
-        const res = await fetch(`${WP_SERVICE_URL}${endpoint}`, {
-            ...options,
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': WP_API_KEY,
-                ...options.headers
-            }
-        });
-        const json = await res.json();
-        console.log(`[WhatsAppConnection] External Response:`, json);
-        return json;
-    } else {
-        // Fallback: Ana API üzerinden
-        const targetUrl = `/admin${endpoint}`;
-        console.log(`[WhatsAppConnection] Using Internal API: ${targetUrl}`);
+    // Force usage of internal API logic only
+    const targetUrl = `/admin${endpoint}`;
+    console.log(`[WhatsAppConnection] Using Internal API: ${targetUrl}`);
+
+    try {
         if (options.method === 'POST') {
             const res = await API.post(targetUrl, options.body ? JSON.parse(options.body) : {});
-            console.log(`[WhatsAppConnection] Internal POST Response:`, res.data);
             return res.data;
         }
         const res = await API.get(targetUrl);
-        console.log(`[WhatsAppConnection] Internal GET Response:`, res.data);
         return res.data;
+    } catch (error) {
+        console.error('[WhatsAppConnection] API Error:', error);
+        throw error;
     }
 };
 
