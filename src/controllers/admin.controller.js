@@ -140,7 +140,7 @@ const updateAppointment = async (req, res, next) => {
     }
 }
 
-const whatsappService = require('../services/whatsapp.service'); // Ensure this is imported
+
 
 const sendBroadcast = async (req, res, next) => {
     try {
