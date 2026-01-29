@@ -42,6 +42,7 @@ const WhatsAppConnection = () => {
     const [qr, setQr] = useState(null);
     const [pairingCode, setPairingCode] = useState(null);
     const [phone, setPhone] = useState('');
+    const [lastError, setLastError] = useState(null);
 
     const fetchStatus = async () => {
         try {
@@ -54,11 +55,10 @@ const WhatsAppConnection = () => {
             setQr(data.qr);
             setPairingCode(data.pairingCode);
         } catch (error) {
-            console.error('[WhatsAppConnection] Failed to fetch WhatsApp status:', error.response?.data || error.message);
-            if (error.response) {
-                console.error('[WhatsAppConnection] Status:', error.response.status);
-                console.error('[WhatsAppConnection] Headers:', error.response.headers);
-            }
+            const errMsg = error.response?.data?.message || error.message || 'Bilinmeyen Hata';
+            const statusErr = error.response?.status;
+            console.error('[WhatsAppConnection] Failed:', errMsg);
+            setLastError(`${statusErr ? `(${statusErr}) ` : ''}${errMsg}`);
         }
     };
 
@@ -68,9 +68,23 @@ const WhatsAppConnection = () => {
         return () => clearInterval(interval);
     }, []);
 
+    useEffect(() => {
+        if (status === 'INITIALIZING') {
+            // If stuck in initializing for too long, maybe show warning?
+        }
+    }, [status]);
+
     return (
         <div className="bg-white p-4 rounded-xl shadow-sm mb-6 flex flex-col items-center justify-center border border-gray-100">
             <h3 className="text-gray-900 font-bold mb-2">WhatsApp Bağlantısı</h3>
+
+            {/* DEBUG ERROR DISPLAY */}
+            {lastError && (
+                <div className="bg-red-100 text-red-700 p-2 rounded text-xs w-full text-center mb-2">
+                    <strong>HATA:</strong> {lastError}
+                </div>
+            )}
+
             {status === 'CONNECTED' && (
                 <div className="flex flex-col items-center gap-4">
                     <div className="flex items-center gap-2 text-green-600 font-bold bg-green-50 px-4 py-2 rounded-lg">
