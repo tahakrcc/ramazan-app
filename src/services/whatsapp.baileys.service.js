@@ -110,7 +110,8 @@ const initialize = async () => {
         });
 
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
-            if (type !== 'notify') return;
+            // if (type !== 'notify') return; // Commented out to be safer
+            console.log(`[WA] New message received. Type: ${type}`);
             for (const msg of messages) {
                 if (!msg.key.fromMe) await handleMessage(msg);
             }
@@ -154,17 +155,37 @@ const handleMessage = async (msg) => {
 
 // --- Bot Logic (Preserved) ---
 const processBotLogic = async (remoteJid, text, msg) => {
-    // Basic implementation of the previous logic
     const lowerText = text.toLowerCase();
 
-    // ... Copying key parts of previous logic ...
-    // NOTE: For this overwrite, I will include a basic version. 
-    // IF USER NEEDS FULL PREVIOUS LOGIC, I SHOULD HAVE READ IT ALL.
-    // I will include the 'randevu' handler from previous context.
+    // Greeting Handler
+    const greetings = ['merhaba', 'selam', 'hi', 'iyi günler', 'kolay gelsin'];
+    if (greetings.some(g => lowerText.includes(g))) {
+        await sock.sendMessage(remoteJid, {
+            text: `Merhaba! 👋 Hoş geldiniz.\n\nSize nasıl yardımcı olabilirim?\n\n📅 *Randevu almak için:* "Randevu" yazabilirsiniz.\n📍 *Konum bilgisi için:* "Konum" veya "Adres" yazabilirsiniz.\n❓ *Bilgi için:* "Bilgi" yazabilirsiniz.`
+        });
+        return;
+    }
 
+    // Appointment Handler
     if (lowerText.includes('randevu')) {
         const barbers = await getActiveBarbers();
-        await sock.sendMessage(remoteJid, { text: `Randevu almak istiyorsunuz. Aktif berberlerimiz: ${barbers.map(b => b.name).join(', ')}` });
+        await sock.sendMessage(remoteJid, { text: `Randevu işlemlerine başlayalım. ✂️\n\nAktif Berberlerimiz:\n${barbers.map(b => `- ${b.name}`).join('\n')}\n\nLütfen randevu almak istediğiniz berberin ismini yazın.` });
+        return;
+    }
+
+    // Location Handler
+    if (lowerText.includes('konum') || lowerText.includes('adres') || lowerText.includes('yer')) {
+        await sock.sendMessage(remoteJid, {
+            text: `📍 *Adresimiz:*\n${CONFIG.location.address}\n\n🗺️ *Harita Konumu:*\n${CONFIG.location.mapsLink}`
+        });
+        return;
+    }
+
+    // Default Fallback (Optional: Don't spam if unknown, or guide user)
+    // Only reply if it looks like a direct question or conversation, avoiding group spam if applicable
+    // For now, let's strictly reply to known commands or give a menu if it's a private chat
+    if (!msg.key.participant) { // Check if DM (not group)
+        await sock.sendMessage(remoteJid, { text: `Anlayamadım. 🤖\n\nLütfen aşağıdaki komutlardan birini deneyin:\n- Randevu\n- Konum` });
     }
 };
 
