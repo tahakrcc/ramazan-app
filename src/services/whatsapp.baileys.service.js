@@ -63,33 +63,11 @@ const initialize = async () => {
 
             console.log(`[WA] Connection Update: ${connection || 'connecting'} | QR: ${!!qr} | Registered: ${!!state.creds?.registered}`);
 
-            // PAIRING CODE LOGIC:
-            // Trigger request ONLY when QR is emitted (socket ready) AND we are not registered
-            if (qr && !state.creds.registered && !pairingCode) {
-                console.log('[WA] QR received. Requesting Pairing Code...');
-                try {
-                    // Small delay for socket stability
-                    await new Promise(r => setTimeout(r, 2000));
-
-                    const code = await sock.requestPairingCode(CONFIG.phone);
-                    pairingCode = code;
-                    qrCode = null; // Hide QR if using pairing code
-                    status = 'PAIRING_CODE_READY';
-
-                    console.log('--------------------------------------------------');
-                    console.log('✅ WHATSAPP PAIRING CODE:', code);
-                    console.log('--------------------------------------------------');
-                    logger.info(`WhatsApp Pairing Code: ${code}`);
-                } catch (e) {
-                    console.error('[WA] Failed to request pairing code:', e);
-                    // Fallback to QR
-                    qrCode = qr;
-                    pairingCode = null;
-                    status = 'QR_READY';
-                }
-            } else if (qr && !pairingCode) {
-                // If we failed pairing code or just want QR fallback
+            // QR CODE LOGIC (Reverted directly to QR)
+            if (qr) {
+                console.log('[WA] QR received. Status: QR_READY');
                 qrCode = qr;
+                pairingCode = null;
                 status = 'QR_READY';
                 logger.info('WhatsApp QR Code generated');
             }
