@@ -272,6 +272,19 @@ router.post('/whatsapp/logout', protect, async (req, res, next) => {
     }
 });
 
+// Force reset WhatsApp session (clears database auth)
+router.post('/whatsapp/reset', protect, async (req, res, next) => {
+    try {
+        const mongoose = require('mongoose');
+        // Clear auth states from MongoDB
+        await mongoose.connection.db.collection('authstates').deleteMany({});
+        logger.info('WhatsApp session force reset by admin');
+        res.json({ success: true, message: 'WhatsApp oturumu sıfırlandı. Sayfa yenilenince yeni QR kod gelecek.' });
+    } catch (error) {
+        next(error);
+    }
+});
+
 // =============== STAFF MANAGEMENT ===============
 const AdminUser = require('../models/admin.model'); // Admin model is effectively User model
 
