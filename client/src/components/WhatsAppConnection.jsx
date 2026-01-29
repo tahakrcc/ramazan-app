@@ -76,20 +76,37 @@ const WhatsAppConnection = () => {
                     <div className="flex items-center gap-2 text-green-600 font-bold bg-green-50 px-4 py-2 rounded-lg">
                         <span>✅</span> Bot Aktif ve Çalışıyor
                     </div>
-                    <button
-                        onClick={async () => {
-                            if (!window.confirm('WhatsApp bağlantısını kesmek istediğinize emin misiniz?')) return;
-                            try {
-                                await wpFetch('/whatsapp/logout', { method: 'POST' });
-                                setStatus('INITIALIZING');
-                            } catch (e) {
-                                alert('Çıkış yapılamadı');
-                            }
-                        }}
-                        className="text-red-600 text-sm hover:underline border border-red-200 px-3 py-1 rounded hover:bg-red-50"
-                    >
-                        Bağlantıyı Kes
-                    </button>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={async () => {
+                                if (!window.confirm('WhatsApp bağlantısını kesmek istediğinize emin misiniz?')) return;
+                                try {
+                                    await wpFetch('/whatsapp/logout', { method: 'POST' });
+                                    setStatus('INITIALIZING');
+                                } catch (e) {
+                                    alert('Çıkış yapılamadı');
+                                }
+                            }}
+                            className="text-red-600 text-sm hover:underline border border-red-200 px-3 py-1 rounded hover:bg-red-50"
+                        >
+                            Bağlantıyı Kes
+                        </button>
+                        <button
+                            onClick={async () => {
+                                if (!window.confirm('Tüm WhatsApp oturumlarını sıfırlamak istediğinize emin misiniz? Bu işlem botu yeniden QR kodu istemeye zorlayacak.')) return;
+                                try {
+                                    await wpFetch('/whatsapp/reset', { method: 'POST' });
+                                    alert('Oturumlar sıfırlandı. Sayfa yenilenecek.');
+                                    window.location.reload();
+                                } catch (e) {
+                                    alert('Sıfırlama başarısız: ' + e.message);
+                                }
+                            }}
+                            className="text-orange-600 text-sm hover:underline border border-orange-200 px-3 py-1 rounded hover:bg-orange-50"
+                        >
+                            🔄 Oturumları Sıfırla
+                        </button>
+                    </div>
                 </div>
             )}
             {status === 'CONNECTING' && (
