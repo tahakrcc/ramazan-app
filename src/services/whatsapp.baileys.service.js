@@ -3,6 +3,7 @@ const useMongoDBAuthState = require('../utils/mongoAuthState');
 const logger = require('../config/logger');
 const Admin = require('../models/admin.model');
 const Service = require('../models/service.model');
+const Settings = require('../models/settings.model');
 const appointmentService = require('./appointment.service');
 const { format, addDays } = require('date-fns');
 
@@ -32,6 +33,27 @@ const getActiveServices = async () => {
     try {
         return await Service.find({ isActive: true });
     } catch (e) { return []; }
+};
+
+const getSettings = async () => {
+    try {
+        return await Settings.getSettings();
+    } catch (e) {
+        return { bookingRangeDays: 14, appointmentStartHour: 10, appointmentEndHour: 20 };
+    }
+};
+
+// Send notification to admin
+const notifyAdmin = async (message) => {
+    try {
+        const adminJid = `${CONFIG.phone}@s.whatsapp.net`;
+        if (sock) {
+            await sock.sendMessage(adminJid, { text: message });
+            logger.info(`Admin notification sent: ${message.substring(0, 50)}...`);
+        }
+    } catch (e) {
+        logger.error('Failed to notify admin:', e);
+    }
 };
 
 const parseDateInput = (input) => {
@@ -226,12 +248,21 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 barberName: matchedBarber.name
             });
 
-            const today = format(new Date(), 'yyyy-MM-dd');
-            const tomorrow = format(addDays(new Date(), 1), 'yyyy-MM-dd');
-            const dayAfter = format(addDays(new Date(), 2), 'yyyy-MM-dd');
+            // Get booking range from settings
+            const settings = await getSettings();
+            const maxDays = settings.bookingRangeDays || 14;
+
+            // Build date options
+            let dateOptions = [];
+            for (let i = 0; i < Math.min(maxDays, 7); i++) {
+                const d = addDays(new Date(), i);
+                const dateStr = format(d, 'yyyy-MM-dd');
+                const dayName = i === 0 ? 'Bugün' : i === 1 ? 'Yarın' : format(d, 'dd/MM (EEEE)', { locale: require('date-fns/locale/tr') });
+                dateOptions.push(`${i + 1}️⃣ ${dayName} (${dateStr})`);
+            }
 
             await sock.sendMessage(remoteJid, {
-                text: `✅ *${matchedBarber.name}* seçildi.\n\n📅 Hangi gün randevu almak istersiniz?\n\n1️⃣ Bugün (${today})\n2️⃣ Yarın (${tomorrow})\n3️⃣ ${dayAfter}\n\nYazınız: *Bugün*, *Yarın* veya tarih (örn: ${dayAfter})`
+                text: `✅ *${matchedBarber.name}* seçildi.\n\n📅 Hangi gün randevu almak istersiniz?\n\n${dateOptions.join('\n')}\n\n👆 Numara yazın (1-${dateOptions.length}) veya tarih yazın`
             });
         } else {
             await sock.sendMessage(remoteJid, {
@@ -244,13 +275,17 @@ const processBotLogic = async (remoteJid, text, msg) => {
     // Step: Waiting for Date Selection
     if (session.step === 'AWAITING_DATE') {
         let selectedDate = null;
+        const settings = await getSettings();
+        const maxDays = Math.min(settings.bookingRangeDays || 14, 7);
 
-        if (lowerText.includes('bugün') || lowerText === '1') {
+        // Check if input is a number (1-7)
+        const numInput = parseInt(lowerText);
+        if (!isNaN(numInput) && numInput >= 1 && numInput <= maxDays) {
+            selectedDate = format(addDays(new Date(), numInput - 1), 'yyyy-MM-dd');
+        } else if (lowerText.includes('bugün')) {
             selectedDate = format(new Date(), 'yyyy-MM-dd');
-        } else if (lowerText.includes('yarın') || lowerText === '2') {
+        } else if (lowerText.includes('yarın')) {
             selectedDate = format(addDays(new Date(), 1), 'yyyy-MM-dd');
-        } else if (lowerText === '3') {
-            selectedDate = format(addDays(new Date(), 2), 'yyyy-MM-dd');
         } else if (/^\d{4}-\d{2}-\d{2}$/.test(text.trim())) {
             selectedDate = text.trim();
         }
@@ -332,6 +367,9 @@ const processBotLogic = async (remoteJid, text, msg) => {
                     text: `🎉 *Randevunuz başarıyla oluşturuldu!*\n\n👤 ${s.customerName}\n✂️ ${s.barberName}\n📅 ${s.date} - ${s.hour}\n\n📍 Adres: ${CONFIG.location.address}\n\nBizi tercih ettiğiniz için teşekkürler! 💈`
                 });
 
+                // Notify admin about new appointment
+                await notifyAdmin(`🆕 *Yeni WhatsApp Randevusu!*\n\n👤 Müşteri: ${s.customerName}\n📱 Tel: ${phone}\n✂️ Berber: ${s.barberName}\n📅 Tarih: ${s.date}\n⏰ Saat: ${s.hour}`);
+
                 clearSession(remoteJid);
             } catch (err) {
                 logger.error('Appointment creation error:', err);
@@ -380,6 +418,24 @@ const processBotLogic = async (remoteJid, text, msg) => {
         await sock.sendMessage(remoteJid, {
             text: `📍 *Adresimiz:*\n${CONFIG.location.address}\n\n🗺️ *Harita Konumu:*\n${CONFIG.location.mapsLink}`
         });
+        return;
+    }
+
+    // Info Handler
+    if (lowerText.includes('bilgi') || lowerText.includes('hakkında') || lowerText.includes('info')) {
+        const services = await getActiveServices();
+        const barbers = await getActiveBarbers();
+        let infoText = `ℹ️ *${CONFIG.businessName} Hakkında*\n\n`;
+        infoText += `📍 *Adres:* ${CONFIG.location.address}\n`;
+        infoText += `🌐 *Website:* ${CONFIG.website}\n`;
+        infoText += `📞 *Telefon:* ${CONFIG.phone}\n\n`;
+        if (barbers.length > 0) {
+            infoText += `✂️ *Berberlerimiz:*\n${barbers.map(b => `• ${b.name}`).join('\n')}\n\n`;
+        }
+        if (services.length > 0) {
+            infoText += `💇 *Hizmetlerimiz:*\n${services.map(s => `• ${s.name} - ${s.price}₺`).join('\n')}`;
+        }
+        await sock.sendMessage(remoteJid, { text: infoText });
         return;
     }
 
