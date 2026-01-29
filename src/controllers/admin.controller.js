@@ -2,6 +2,7 @@ const Admin = require('../models/admin.model');
 const Appointment = require('../models/appointment.model');
 const appointmentService = require('../services/appointment.service'); // Added import
 const broadcastService = require('../services/broadcast.service'); // Added import
+const whatsappService = require('../services/whatsapp.service'); // Added import
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const logger = require('../config/logger');
