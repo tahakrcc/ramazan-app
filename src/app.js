@@ -81,7 +81,7 @@ app.use(express.json({ limit: '10kb' }));
 // Rate Limiting for API
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
+    max: 2000, // Increased limit for polling (was 100)
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Çok fazla istek, lütfen 15 dakika sonra tekrar deneyin.' }
