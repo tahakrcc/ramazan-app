@@ -172,6 +172,46 @@ const processBotLogic = async (remoteJid, text, msg) => {
         return;
     }
 
+    // Back command - go to previous step
+    if (lowerText === 'geri' || lowerText === 'önceki') {
+        const stepOrder = ['IDLE', 'AWAITING_BARBER', 'AWAITING_DATE', 'AWAITING_HOUR', 'AWAITING_NAME', 'CONFIRMING'];
+        const currentIndex = stepOrder.indexOf(session.step);
+
+        if (currentIndex <= 1) {
+            // Already at start or AWAITING_BARBER, restart
+            clearSession(remoteJid);
+            await sock.sendMessage(remoteJid, { text: '⬅️ Başa döndünüz. Yeni işlem için "Randevu" yazabilirsiniz.' });
+            return;
+        }
+
+        const prevStep = stepOrder[currentIndex - 1];
+        setSession(remoteJid, { step: prevStep });
+
+        // Show appropriate message for previous step
+        if (prevStep === 'AWAITING_BARBER') {
+            const barbers = await getActiveBarbers();
+            await sock.sendMessage(remoteJid, {
+                text: `⬅️ Berber seçimine döndünüz.\n\n*Aktif Berberlerimiz:*\n${barbers.map(b => `• ${b.name}`).join('\n')}\n\n👆 Lütfen berberin ismini yazın.`
+            });
+        } else if (prevStep === 'AWAITING_DATE') {
+            const today = format(new Date(), 'yyyy-MM-dd');
+            const tomorrow = format(addDays(new Date(), 1), 'yyyy-MM-dd');
+            await sock.sendMessage(remoteJid, {
+                text: `⬅️ Tarih seçimine döndünüz.\n\n📅 Hangi gün?\n\n1️⃣ Bugün (${today})\n2️⃣ Yarın (${tomorrow})\n\nYazınız: *Bugün*, *Yarın* veya tarih`
+            });
+        } else if (prevStep === 'AWAITING_HOUR') {
+            const availableHours = ['10:00', '10:30', '11:00', '11:30', '12:00', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00'];
+            await sock.sendMessage(remoteJid, {
+                text: `⬅️ Saat seçimine döndünüz.\n\n⏰ Hangi saat?\n\n${availableHours.join(', ')}\n\nÖrnek: *14:30*`
+            });
+        } else if (prevStep === 'AWAITING_NAME') {
+            await sock.sendMessage(remoteJid, {
+                text: `⬅️ İsim girişine döndünüz.\n\n👤 Lütfen *adınızı ve soyadınızı* yazın:`
+            });
+        }
+        return;
+    }
+
     // --- BOOKING FLOW STATES ---
 
     // Step: Waiting for Barber Selection
