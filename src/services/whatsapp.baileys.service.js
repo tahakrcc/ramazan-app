@@ -6,7 +6,21 @@ const Service = require('../models/service.model');
 const Settings = require('../models/settings.model');
 const appointmentService = require('./appointment.service');
 const { format, addDays } = require('date-fns');
-const trLocale = require('date-fns/locale/tr'); // Ensure this is loaded correctly
+// date-fns v3+ uses named exports from locale package
+let trLocale;
+try {
+    // Try v3+ syntax first
+    const locales = require('date-fns/locale');
+    trLocale = locales.tr;
+} catch (e) {
+    // Fallback for older versions
+    try {
+        trLocale = require('date-fns/locale/tr');
+    } catch (e2) {
+        console.warn('Turkish locale not available, using default');
+        trLocale = undefined;
+    }
+}
 
 const CONFIG = {
     businessName: 'By Ramazan',
@@ -348,7 +362,21 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 for (let i = 0; i < Math.min(maxDays, 7); i++) {
                     const d = addDays(new Date(), i);
                     const dateStr = format(d, 'yyyy-MM-dd');
-                    const dayName = i === 0 ? 'Bugün' : i === 1 ? 'Yarın' : format(d, 'dd/MM (EEEE)', { locale: trLocale });
+                    // Safely handle locale - if undefined, just show date without day name
+                    let dayName;
+                    if (i === 0) {
+                        dayName = 'Bugün';
+                    } else if (i === 1) {
+                        dayName = 'Yarın';
+                    } else {
+                        try {
+                            dayName = trLocale
+                                ? format(d, 'dd/MM (EEEE)', { locale: trLocale })
+                                : format(d, 'dd/MM (EEE)');
+                        } catch (localeErr) {
+                            dayName = format(d, 'dd/MM');
+                        }
+                    }
                     dateOptions.push(`${i + 1}️⃣ ${dayName} (${dateStr})`);
                 }
 
