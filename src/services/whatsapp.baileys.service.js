@@ -60,6 +60,57 @@ const getSettings = async () => {
     }
 };
 
+// --- FUZZY MATCHING: Command aliases for flexible input ---
+const COMMAND_ALIASES = {
+    // Greetings
+    'mrb': 'merhaba', 'mrhb': 'merhaba', 'meraba': 'merhaba', 'merhba': 'merhaba',
+    'slm': 'selam', 'selamm': 'selam', 'selm': 'selam',
+
+    // Appointment
+    'rndv': 'randevu', 'randevuu': 'randevu', 'rndvu': 'randevu', 'randvu': 'randevu',
+    'rndvm': 'randevum', 'randevumm': 'randevum',
+
+    // Navigation
+    'gri': 'geri', 'gerı': 'geri', 'ger': 'geri',
+    'ipt': 'iptal', 'ıptal': 'iptal', 'iptalım': 'iptal', 'iptl': 'iptal',
+    'vazgec': 'vazgeç', 'vazgc': 'vazgeç',
+
+    // Confirmation
+    'evt': 'evet', 'evett': 'evet', 'evvet': 'evet', 'eet': 'evet',
+    'hyr': 'hayır', 'hayir': 'hayır', 'hayr': 'hayır',
+    'onyla': 'onay', 'onayla': 'onay', 'ony': 'onay',
+    'tmm': 'tamam', 'tmam': 'tamam', 'tamamm': 'tamam',
+
+    // Info
+    'knm': 'konum', 'konumm': 'konum', 'konm': 'konum',
+    'adrs': 'adres', 'adress': 'adres',
+    'blg': 'bilgi', 'bilgı': 'bilgi', 'blgi': 'bilgi',
+
+    // Complaint
+    'skyt': 'şikayet', 'sikayet': 'şikayet', 'şkayet': 'şikayet', 'şikyet': 'şikayet',
+    'onr': 'öneri', 'onerı': 'öneri', 'oneri': 'öneri',
+
+    // Days
+    'bugn': 'bugün', 'bugun': 'bugün', 'bgn': 'bugün',
+    'yrn': 'yarın', 'yarin': 'yarın', 'yarn': 'yarın'
+};
+
+// Normalize text: apply aliases and fix common typos
+const normalizeText = (text) => {
+    let normalized = text.toLocaleLowerCase('tr-TR').trim();
+
+    // Check if the whole word is an alias
+    if (COMMAND_ALIASES[normalized]) {
+        return COMMAND_ALIASES[normalized];
+    }
+
+    // Check each word in the text
+    const words = normalized.split(/\s+/);
+    const normalizedWords = words.map(word => COMMAND_ALIASES[word] || word);
+
+    return normalizedWords.join(' ');
+};
+
 // Send notification to admin
 const notifyAdmin = async (message) => {
     try {
@@ -221,8 +272,8 @@ const clearSession = (jid) => { delete userSessions[jid]; };
 
 // --- Bot Logic with Booking Flow ---
 const processBotLogic = async (remoteJid, text, msg) => {
-    // FIX: Use Turkish locale for correct case conversion (İ -> i, I -> ı)
-    const lowerText = text.toLocaleLowerCase('tr-TR').trim();
+    // Apply fuzzy matching normalization for flexible input recognition
+    const lowerText = normalizeText(text);
 
     // PRIORITY 1: GLOBAL RESET COMMANDS (Run before session checks)
     const session = getSession(remoteJid);
@@ -420,6 +471,20 @@ const processBotLogic = async (remoteJid, text, msg) => {
             selectedDate = format(addDays(today, 1), 'yyyy-MM-dd');
         } else if (/^\d{4}-\d{2}-\d{2}$/.test(text.trim())) {
             const inputDate = text.trim();
+
+            // FIRST: Validate that it's a real date (not 2026-01-80)
+            const [year, month, day] = inputDate.split('-').map(Number);
+            const dateObj = new Date(year, month - 1, day);
+            const isValidDate = dateObj.getFullYear() === year &&
+                dateObj.getMonth() === month - 1 &&
+                dateObj.getDate() === day;
+
+            if (!isValidDate) {
+                await sock.sendMessage(remoteJid, {
+                    text: `⚠️ *${inputDate}* geçerli bir tarih değil.\n\nLütfen geçerli bir tarih giriniz.\n\n⬅️ Geri için "geri" yazın.`
+                });
+                return;
+            }
 
             // Validate: not in the past
             if (inputDate < todayStr) {
