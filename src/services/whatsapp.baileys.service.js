@@ -260,7 +260,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
             if (!barbers || barbers.length === 0) {
                 barbers = await getActiveBarbers();
                 // We must update session with this new list so index matches when user selects
-                setSession(remoteJid, { tempBarbers: barbers.map(b => ({ _id: b._id, name: b.name })) });
+                setSession(remoteJid, { tempBarbers: barbers.map(b => ({ _id: b._id.toString(), name: b.name })) });
             }
 
             await sock.sendMessage(remoteJid, {
@@ -323,29 +323,45 @@ const processBotLogic = async (remoteJid, text, msg) => {
         }
 
         if (matchedBarber) {
-            setSession(remoteJid, {
-                step: 'AWAITING_DATE',
-                barberId: matchedBarber._id.toString(),
-                barberName: matchedBarber.name
-            });
+            try {
+                // Ensure _id is a string
+                const barberId = matchedBarber._id ? String(matchedBarber._id) : null;
 
-            // Get booking range from settings
-            const settings = await getSettings();
-            const maxDays = settings.bookingRangeDays || 14;
+                if (!barberId) {
+                    logger.error('Barber ID is missing:', matchedBarber);
+                    await sock.sendMessage(remoteJid, { text: '⚠️ Bir hata oluştu. Lütfen tekrar deneyin.' });
+                    return;
+                }
 
-            // Build date options
-            let dateOptions = [];
-            for (let i = 0; i < Math.min(maxDays, 7); i++) {
-                const d = addDays(new Date(), i);
-                const dateStr = format(d, 'yyyy-MM-dd');
-                const dayName = i === 0 ? 'Bugün' : i === 1 ? 'Yarın' : format(d, 'dd/MM (EEEE)', { locale: trLocale });
-                dateOptions.push(`${i + 1}️⃣ ${dayName} (${dateStr})`);
+                setSession(remoteJid, {
+                    step: 'AWAITING_DATE',
+                    barberId: barberId,
+                    barberName: matchedBarber.name
+                });
+
+                // Get booking range from settings
+                const settings = await getSettings();
+                const maxDays = settings.bookingRangeDays || 14;
+
+                // Build date options
+                let dateOptions = [];
+                for (let i = 0; i < Math.min(maxDays, 7); i++) {
+                    const d = addDays(new Date(), i);
+                    const dateStr = format(d, 'yyyy-MM-dd');
+                    const dayName = i === 0 ? 'Bugün' : i === 1 ? 'Yarın' : format(d, 'dd/MM (EEEE)', { locale: trLocale });
+                    dateOptions.push(`${i + 1}️⃣ ${dayName} (${dateStr})`);
+                }
+
+                const displayBarberName = matchedBarber.name === 'Admin' ? 'Ramazan' : matchedBarber.name;
+                await sock.sendMessage(remoteJid, {
+                    text: `✅ *${displayBarberName}* seçildi.\n\n📅 *Lütfen Bir Tarih Seçiniz:*\n\n${dateOptions.join('\n')}\n\n👆 (Listeden numara veya tarih yazabilirsiniz)`
+                });
+
+                logger.info(`Barber selected: ${displayBarberName} (${barberId}) for ${remoteJid}`);
+            } catch (err) {
+                logger.error('Error in barber selection:', err);
+                await sock.sendMessage(remoteJid, { text: '⚠️ Bir hata oluştu. Lütfen tekrar deneyin veya "iptal" yazın.' });
             }
-
-            const displayBarberName = matchedBarber.name === 'Admin' ? 'Ramazan' : matchedBarber.name;
-            await sock.sendMessage(remoteJid, {
-                text: `✅ *${displayBarberName}* seçildi.\n\n📅 *Lütfen Bir Tarih Seçiniz:*\n\n${dateOptions.join('\n')}\n\n👆 (Listeden numara veya tarih yazabilirsiniz)`
-            });
         } else {
             // Need fresh barbers list for display if not in session, but we defined const barbers above
             await sock.sendMessage(remoteJid, {
@@ -541,9 +557,10 @@ const processBotLogic = async (remoteJid, text, msg) => {
         }
 
         // Store the exact list presented to the user to ensure index matches
+        // IMPORTANT: Store _id as string to prevent ObjectId serialization issues
         setSession(remoteJid, {
             step: 'AWAITING_BARBER',
-            tempBarbers: barbers.map(b => ({ _id: b._id, name: b.name }))
+            tempBarbers: barbers.map(b => ({ _id: b._id.toString(), name: b.name }))
         });
 
         await sock.sendMessage(remoteJid, {
