@@ -281,18 +281,25 @@ const processBotLogic = async (remoteJid, text, msg) => {
     // --- BOOKING FLOW STATES ---
 
     // Step: Waiting for Barber Selection
+    // Step: Waiting for Barber Selection
     if (session.step === 'AWAITING_BARBER') {
-        const barbers = await getActiveBarbers();
+        // Use stored barbers from session if available (to match index), otherwise fetch fresh
+        const barbers = session.tempBarbers || await getActiveBarbers();
 
         let matchedBarber = null;
-        const selectionIndex = parseInt(lowerText) - 1;
+        // Handle "1.", "1)" inputs
+        const cleanNumber = lowerText.replace(/[^0-9]/g, '');
+        const selectionIndex = parseInt(cleanNumber) - 1;
 
-        if (!isNaN(selectionIndex) && selectionIndex >= 0 && selectionIndex < barbers.length) {
+        if (cleanNumber && !isNaN(selectionIndex) && selectionIndex >= 0 && selectionIndex < barbers.length) {
             matchedBarber = barbers[selectionIndex];
         } else {
+            // Text search
             matchedBarber = barbers.find(b => {
-                const nameToCheck = b.name === 'Admin' ? 'ramazan' : b.name.toLocaleLowerCase('tr-TR');
-                return nameToCheck === lowerText;
+                const dbName = b.name.toLocaleLowerCase('tr-TR');
+                // Special alias for Ramazan = Admin
+                if (dbName === 'admin' && (lowerText === 'ramazan' || lowerText.includes('ramazan'))) return true;
+                return dbName === lowerText || lowerText.includes(dbName);
             });
         }
 
@@ -320,6 +327,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 text: `✅ *${matchedBarber.name}* seçildi.\n\n📅 *Lütfen Bir Tarih Seçiniz:*\n\n${dateOptions.join('\n')}\n\n👆 (Listeden numara veya tarih yazabilirsiniz)`
             });
         } else {
+            // Need fresh barbers list for display if not in session, but we defined const barbers above
             await sock.sendMessage(remoteJid, {
                 text: `⚠️ "${text}" geçerli bir seçim değil.\n\nLütfen listeden bir berber seçin (Numara veya İsim):\n${barbers.map((b, i) => `${i + 1}️⃣ ${b.name === 'Admin' ? 'Ramazan' : b.name}`).join('\n')}\n\n(İptal için "iptal" yazın)`
             });
@@ -468,7 +476,12 @@ const processBotLogic = async (remoteJid, text, msg) => {
             return;
         }
 
-        setSession(remoteJid, { step: 'AWAITING_BARBER' });
+        // Store the exact list presented to the user to ensure index matches
+        setSession(remoteJid, {
+            step: 'AWAITING_BARBER',
+            tempBarbers: barbers.map(b => ({ _id: b._id, name: b.name }))
+        });
+
         await sock.sendMessage(remoteJid, {
             text: `Randevu işlemlerine başlayalım. ✂️\n\n*Aktif Berberlerimiz:*\n${barbers.map((b, i) => `${i + 1}️⃣ ${b.name === 'Admin' ? 'Ramazan' : b.name}`).join('\n')}\n\n👆 Lütfen randevu almak istediğiniz *berberin numarasını* (1, 2...) yazın veya ismini yazın.`
         });
