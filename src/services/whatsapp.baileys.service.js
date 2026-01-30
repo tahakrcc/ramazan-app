@@ -4,6 +4,8 @@ const logger = require('../config/logger');
 const Admin = require('../models/admin.model');
 const Service = require('../models/service.model');
 const Settings = require('../models/settings.model');
+const Appointment = require('../models/appointment.model');
+const ClosedDate = require('../models/closedDate.model');
 const appointmentService = require('./appointment.service');
 const { format, addDays } = require('date-fns');
 // date-fns v3+ uses named exports from locale package
@@ -224,7 +226,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
     // PRIORITY 1: GLOBAL RESET COMMANDS (Run before session checks)
     const session = getSession(remoteJid);
-    const globalKeywords = ['merhaba', 'selam', 'hi', 'başla', 'menu', 'menü', 'randevu', 'konum', 'bilgi', 'şikayet', 'sikayet', 'öneri'];
+    const globalKeywords = ['merhaba', 'selam', 'hi', 'başla', 'menu', 'menü', 'randevu', 'randevum', 'konum', 'bilgi', 'şikayet', 'sikayet', 'öneri'];
 
     // Check if user is trying to run a global command while in an active session
     if (session.step !== 'IDLE' && globalKeywords.some(w => lowerText.includes(w))) {
@@ -382,7 +384,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
                 const displayBarberName = matchedBarber.name === 'Admin' ? 'Ramazan' : matchedBarber.name;
                 await sock.sendMessage(remoteJid, {
-                    text: `✅ *${displayBarberName}* seçildi.\n\n📅 *Lütfen Bir Tarih Seçiniz:*\n\n${dateOptions.join('\n')}\n\n👆 (Listeden numara veya tarih yazabilirsiniz)`
+                    text: `✅ *${displayBarberName}* seçildi.\n\n📅 *Lütfen Bir Tarih Seçiniz:*\n\n${dateOptions.join('\n')}\n\n👆 Numara veya tarih yazabilirsiniz.\n\n⬅️ Geri için "geri" yazın.`
                 });
 
                 logger.info(`Barber selected: ${displayBarberName} (${barberId}) for ${remoteJid}`);
@@ -403,48 +405,77 @@ const processBotLogic = async (remoteJid, text, msg) => {
     if (session.step === 'AWAITING_DATE') {
         let selectedDate = null;
         const settings = await getSettings();
-        const maxDays = Math.min(settings.bookingRangeDays || 14, 7);
+        const maxDays = settings.bookingRangeDays || 7;
+        const today = new Date();
+        const todayStr = format(today, 'yyyy-MM-dd');
+        const maxDateStr = format(addDays(today, maxDays - 1), 'yyyy-MM-dd');
 
-        // Check if input is a number (1-7)
+        // Check if input is a number (1-maxDays)
         const numInput = parseInt(lowerText);
         if (!isNaN(numInput) && numInput >= 1 && numInput <= maxDays) {
-            selectedDate = format(addDays(new Date(), numInput - 1), 'yyyy-MM-dd');
+            selectedDate = format(addDays(today, numInput - 1), 'yyyy-MM-dd');
         } else if (lowerText.includes('bugün')) {
-            selectedDate = format(new Date(), 'yyyy-MM-dd');
+            selectedDate = todayStr;
         } else if (lowerText.includes('yarın')) {
-            selectedDate = format(addDays(new Date(), 1), 'yyyy-MM-dd');
+            selectedDate = format(addDays(today, 1), 'yyyy-MM-dd');
         } else if (/^\d{4}-\d{2}-\d{2}$/.test(text.trim())) {
-            selectedDate = text.trim();
+            const inputDate = text.trim();
+
+            // Validate: not in the past
+            if (inputDate < todayStr) {
+                await sock.sendMessage(remoteJid, {
+                    text: `⚠️ Geçmiş bir tarih seçemezsiniz.\n\nLütfen bugün veya ileri bir tarih seçiniz.\n\n⬅️ Geri için "geri" yazın.`
+                });
+                return;
+            }
+
+            // Validate: not too far in the future
+            if (inputDate > maxDateStr) {
+                await sock.sendMessage(remoteJid, {
+                    text: `⚠️ En fazla ${maxDays} gün sonrasına randevu alabilirsiniz.\n\nMaximum tarih: ${maxDateStr}\n\n⬅️ Geri için "geri" yazın.`
+                });
+                return;
+            }
+
+            selectedDate = inputDate;
         }
 
         if (selectedDate) {
+            // Check if this date is closed
+            const isClosed = await ClosedDate.findOne({ date: selectedDate });
+            if (isClosed) {
+                await sock.sendMessage(remoteJid, {
+                    text: `⚠️ *${selectedDate}* tarihi tatil/kapalı günü olarak belirlenmiştir.\n\nLütfen başka bir tarih seçiniz.\n\n⬅️ Geri için "geri" yazın.`
+                });
+                return;
+            }
+
             setSession(remoteJid, { step: 'AWAITING_HOUR', date: selectedDate });
 
             // Fetch REAL availability from database
             let availableHours = [];
             try {
-                // Determine barberId - if not in session, we have a problem, but it should be there
                 availableHours = await appointmentService.getAvailableSlots(selectedDate, getSession(remoteJid).barberId);
             } catch (err) {
                 logger.error('Error fetching slots:', err);
-                availableHours = []; // Fallback
+                availableHours = [];
             }
 
             if (availableHours.length === 0) {
                 // Reset step back to AWAITING_DATE so user can pick another date
                 setSession(remoteJid, { step: 'AWAITING_DATE' });
                 await sock.sendMessage(remoteJid, {
-                    text: `📅 *${selectedDate}* tarihinde maalesef boş randevu saati kalmamıştır.\n\nLütfen başka bir tarih seçiniz (1-7 arası numara veya Bugün/Yarın yazabilirsiniz).`
+                    text: `📅 *${selectedDate}* tarihinde maalesef boş randevu saati kalmamıştır.\n\nLütfen başka bir tarih seçiniz.\n\n⬅️ Geri için "geri" yazın.`
                 });
                 return;
             }
 
             await sock.sendMessage(remoteJid, {
-                text: `📅 *${selectedDate}* tarihi seçildi.\n\n⏰ *Müsait Saatler:*\n${availableHours.join(', ')}\n\nLütfen yukarıdaki saatlerden birini yazın (Örn: 14:00 veya sadece 14)`
+                text: `📅 *${selectedDate}* tarihi seçildi.\n\n⏰ *Müsait Saatler:*\n${availableHours.join(', ')}\n\nLütfen bir saat yazın (Örn: 14 veya 14:00)\n\n⬅️ Geri için "geri" yazın.`
             });
         } else {
             await sock.sendMessage(remoteJid, {
-                text: `⚠️ Geçersiz tarih formatı.\n\nLütfen şu şekilde yazın:\n- *Bugün*\n- *Yarın*\n- veya *YYYY-AA-GG* formatında (örn: 2026-01-30)`
+                text: `⚠️ Geçersiz tarih formatı.\n\nLütfen şu şekilde yazın:\n- *Bugün*\n- *Yarın*\n- veya *YYYY-AA-GG* formatında\n\n⬅️ Geri için "geri" yazın.`
             });
         }
         return;
@@ -470,7 +501,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
             const slots = await appointmentService.getAvailableSlots(session.date, session.barberId);
             if (!slots.includes(hour)) {
                 await sock.sendMessage(remoteJid, {
-                    text: `⚠️ *${hour}* saati maalesef doludur veya seçilemez.\n\nLütfen listedeki boş saatlerden birini seçiniz:\n${slots.join(', ')}`
+                    text: `⚠️ *${hour}* saati maalesef doludur veya seçilemez.\n\nLütfen listedeki boş saatlerden birini seçiniz:\n${slots.join(', ')}\n\n⬅️ Geri için "geri" yazın.`
                 });
                 return;
             }
@@ -478,11 +509,11 @@ const processBotLogic = async (remoteJid, text, msg) => {
             setSession(remoteJid, { step: 'AWAITING_NAME', hour });
 
             await sock.sendMessage(remoteJid, {
-                text: `⏰ *${hour}* saati seçildi.\n\n👤 Lütfen *adınızı ve soyadınızı* yazın:`
+                text: `⏰ *${hour}* saati seçildi.\n\n👤 Lütfen *adınızı ve soyadınızı* yazın:\n\n⬅️ Geri için "geri" yazın.`
             });
         } else {
             await sock.sendMessage(remoteJid, {
-                text: `⚠️ Geçersiz saat formatı.\n\nLütfen saati şu şekillerde yazabilirsiniz:\n- *14:00*\n- *14*\n- *10*`
+                text: `⚠️ Geçersiz saat formatı.\n\nLütfen saati şu şekillerde yazabilirsiniz:\n- *14:00*\n- *14*\n\n⬅️ Geri için "geri" yazın.`
             });
         }
         return;
@@ -500,7 +531,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
             });
         } else {
             await sock.sendMessage(remoteJid, {
-                text: `⚠️ Lütfen geçerli bir isim girin.`
+                text: `⚠️ Lütfen geçerli bir isim girin.\n\n⬅️ Geri için "geri" yazın.`
             });
         }
         return;
@@ -563,6 +594,31 @@ const processBotLogic = async (remoteJid, text, msg) => {
         return;
     }
 
+    // Step: Cancel Confirmation
+    if (session.step === 'AWAITING_CANCEL_CONFIRM') {
+        if (lowerText === 'evet' || lowerText === 'onay') {
+            try {
+                await Appointment.findByIdAndUpdate(session.cancelAppointmentId, { status: 'cancelled' });
+                await sock.sendMessage(remoteJid, {
+                    text: `✅ Randevunuz başarıyla iptal edilmiştir.\n\n📅 Yeni randevu için "Randevu" yazabilirsiniz.`
+                });
+
+                // Notify admin
+                await notifyAdmin(`❌ *Randevu İptal Edildi*\n\nID: ${session.cancelAppointmentId}\nTelefon: ${remoteJid.split('@')[0]}`);
+            } catch (err) {
+                logger.error('Cancel save error:', err);
+                await sock.sendMessage(remoteJid, { text: '⚠️ İptal işlemi sırasında bir hata oluştu.' });
+            }
+            clearSession(remoteJid);
+        } else if (lowerText === 'hayır' || lowerText === 'vazgeç') {
+            await sock.sendMessage(remoteJid, { text: '👍 İptal işlemi vazgeçildi. Randevunuz geçerlidir.' });
+            clearSession(remoteJid);
+        } else {
+            await sock.sendMessage(remoteJid, { text: '⚠️ Lütfen *EVET* veya *HAYIR* yazın.' });
+        }
+        return;
+    }
+
 
     // --- MAIN MENU COMMANDS (when not in a flow) ---
 
@@ -571,13 +627,84 @@ const processBotLogic = async (remoteJid, text, msg) => {
     if (greetings.some(g => lowerText.includes(g))) {
         clearSession(remoteJid);
         await sock.sendMessage(remoteJid, {
-            text: `Merhaba! 👋 Hoş geldiniz.\n\nSize nasıl yardımcı olabilirim?\n\n📅 *Randevu almak için:* "Randevu" yazın\n📍 *Konum bilgisi için:* "Konum" yazın\n❓ *Bilgi için:* "Bilgi" yazın\n📣 *Şikayet/Öneri için:* "Şikayet" yazın`
+            text: `Merhaba! 👋 Hoş geldiniz.\n\nSize nasıl yardımcı olabilirim?\n\n📅 *Randevu almak için:* "Randevu" yazın\n📋 *Randevumu sorgula:* "Randevum" yazın\n📍 *Konum bilgisi için:* "Konum" yazın\n❓ *Bilgi için:* "Bilgi" yazın\n📣 *Şikayet/Öneri için:* "Şikayet" yazın`
         });
         return;
     }
 
+    // --- MY APPOINTMENT QUERY ---
+    if (lowerText === 'randevum' || lowerText.includes('randevum ne zaman') || lowerText.includes('randevularım')) {
+        const phone = remoteJid.split('@')[0];
+        const today = format(new Date(), 'yyyy-MM-dd');
+
+        try {
+            // Find future appointments for this phone
+            const appointments = await Appointment.find({
+                phone: phone,
+                status: 'confirmed',
+                date: { $gte: today }
+            }).sort({ date: 1, hour: 1 });
+
+            if (appointments.length === 0) {
+                await sock.sendMessage(remoteJid, {
+                    text: `📋 *Randevu Sorgulaması*\n\nAktif randevunuz bulunmamaktadır.\n\n📅 Yeni randevu için "Randevu" yazın.`
+                });
+            } else {
+                let msg = `📋 *Randevularınız:*\n\n`;
+                appointments.forEach((apt, i) => {
+                    const barberDisplay = apt.barberName === 'Admin' ? 'Ramazan' : apt.barberName;
+                    msg += `${i + 1}️⃣ 📅 ${apt.date} ⏰ ${apt.hour}\n   ✂️ ${barberDisplay}\n\n`;
+                });
+                msg += `❌ İptal için "randevumu iptal et" yazın.`;
+                await sock.sendMessage(remoteJid, { text: msg });
+            }
+        } catch (err) {
+            logger.error('Appointment query error:', err);
+            await sock.sendMessage(remoteJid, { text: '⚠️ Randevu sorgulanırken bir hata oluştu.' });
+        }
+        return;
+    }
+
+    // --- CANCEL MY APPOINTMENT ---
+    if (lowerText.includes('randevumu iptal') || lowerText.includes('randevu iptal') || lowerText === 'iptalim') {
+        const phone = remoteJid.split('@')[0];
+        const today = format(new Date(), 'yyyy-MM-dd');
+
+        try {
+            // Find the next upcoming appointment
+            const appointment = await Appointment.findOne({
+                phone: phone,
+                status: 'confirmed',
+                date: { $gte: today }
+            }).sort({ date: 1, hour: 1 });
+
+            if (!appointment) {
+                await sock.sendMessage(remoteJid, {
+                    text: `📋 İptal edilecek aktif randevunuz bulunmamaktadır.`
+                });
+                return;
+            }
+
+            const barberDisplay = appointment.barberName === 'Admin' ? 'Ramazan' : appointment.barberName;
+
+            // Set session for confirmation
+            setSession(remoteJid, {
+                step: 'AWAITING_CANCEL_CONFIRM',
+                cancelAppointmentId: appointment._id.toString()
+            });
+
+            await sock.sendMessage(remoteJid, {
+                text: `❓ *Randevu İptal Onayı*\n\n📅 ${appointment.date} ⏰ ${appointment.hour}\n✂️ ${barberDisplay}\n👤 ${appointment.customerName}\n\nBu randevuyu iptal etmek istediğinize emin misiniz?\n\n✅ *EVET* yazın onaylamak için\n❌ *HAYIR* yazın vazgeçmek için`
+            });
+        } catch (err) {
+            logger.error('Cancel appointment error:', err);
+            await sock.sendMessage(remoteJid, { text: '⚠️ Randevu iptal edilirken bir hata oluştu.' });
+        }
+        return;
+    }
+
     // Appointment Start Handler
-    if (lowerText.includes('randevu')) {
+    if (lowerText.includes('randevu') && !lowerText.includes('randevum')) {
         const barbers = await getActiveBarbers();
         if (barbers.length === 0) {
             await sock.sendMessage(remoteJid, { text: '⚠️ Şu an aktif berber bulunmamaktadır. Lütfen daha sonra tekrar deneyin.' });
@@ -592,7 +719,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
         });
 
         await sock.sendMessage(remoteJid, {
-            text: `Randevu işlemlerine başlayalım. ✂️\n\n*Aktif Berberlerimiz:*\n${barbers.map((b, i) => `${i + 1}️⃣ ${b.name === 'Admin' ? 'Ramazan' : b.name}`).join('\n')}\n\n👆 Lütfen randevu almak istediğiniz *berberin numarasını* (1, 2...) yazın veya ismini yazın.`
+            text: `Randevu işlemlerine başlayalım. ✂️\n\n*Aktif Berberlerimiz:*\n${barbers.map((b, i) => `${i + 1}️⃣ ${b.name === 'Admin' ? 'Ramazan' : b.name}`).join('\n')}\n\n👆 Lütfen berberin numarasını yazın.\n\n⬅️ İptal için "iptal" yazın.`
         });
         return;
     }
@@ -688,4 +815,15 @@ const logout = async () => {
     }
 };
 
-module.exports = { initialize, getStatus, logout, requestPairing };
+// Public sendMessage function for external use (reminders, notifications, etc.)
+const sendMessage = async (phone, message) => {
+    if (!sock) throw new Error('WhatsApp not connected');
+
+    // Ensure phone format
+    const jid = phone.includes('@') ? phone : `${phone.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
+
+    await sock.sendMessage(jid, { text: message });
+    logger.info(`Message sent to ${jid}`);
+};
+
+module.exports = { initialize, getStatus, logout, requestPairing, sendMessage };
