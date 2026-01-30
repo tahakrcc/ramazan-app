@@ -6,6 +6,8 @@ const Service = require('../models/service.model');
 const Settings = require('../models/settings.model');
 const Appointment = require('../models/appointment.model');
 const ClosedDate = require('../models/closedDate.model');
+const BotState = require('../models/botState.model');
+const Feedback = require('../models/feedback.model');
 const appointmentService = require('./appointment.service');
 const { format, addDays } = require('date-fns');
 // date-fns v3+ uses named exports from locale package
@@ -274,6 +276,58 @@ const clearSession = (jid) => { delete userSessions[jid]; };
 const processBotLogic = async (remoteJid, text, msg) => {
     // Apply fuzzy matching normalization for flexible input recognition
     const lowerText = normalizeText(text);
+    const phone = remoteJid.split('@')[0];
+
+    // PRIORITY 0: Check if user is in AWAITING_FEEDBACK state (from BotState collection)
+    try {
+        const botState = await BotState.findOne({ phone });
+        if (botState && botState.state === 'AWAITING_FEEDBACK') {
+            // Parse feedback: "5 Harika kesimdi" or just "5"
+            const feedbackMatch = text.trim().match(/^([1-5])\s*(.*)/s);
+
+            if (feedbackMatch) {
+                const rating = parseInt(feedbackMatch[1]);
+                const comment = feedbackMatch[2]?.trim() || 'Puan verildi.';
+
+                // Get last appointment for customer info
+                const lastAppt = await Appointment.findOne({
+                    phone: { $regex: phone.slice(-10) }
+                }).sort({ date: -1, hour: -1 });
+
+                // Save feedback
+                await Feedback.create({
+                    customerName: lastAppt?.customerName || 'Müşteri',
+                    phone: phone,
+                    rating: rating,
+                    comment: comment,
+                    barberId: lastAppt?.barberId,
+                    barberName: lastAppt?.barberName,
+                    source: 'whatsapp'
+                });
+
+                // Reset BotState
+                await BotState.findOneAndUpdate({ phone }, { state: 'IDLE', context: {} });
+
+                // Send thank you message with stars
+                const stars = '⭐'.repeat(rating);
+                await sock.sendMessage(remoteJid, {
+                    text: `Teşekkürler! ${stars}\n\nYorumunuz kaydedildi. Bizi tercih ettiğiniz için teşekkür ederiz! 💈`
+                });
+
+                logger.info(`Feedback received from ${phone}: ${rating} stars`);
+            } else {
+                // Invalid format
+                await sock.sendMessage(remoteJid, {
+                    text: `⚠️ Lütfen puanınızı 1-5 arası bir sayı ile başlatın.\n\nÖrnek: *5 Harika kesim!*\n\nVeya sadece puan: *4*`
+                });
+            }
+            return; // Stop processing, feedback handled
+        }
+    } catch (err) {
+        logger.error('BotState check error:', err);
+        // Continue with normal flow if error
+    }
+
 
     // PRIORITY 1: GLOBAL RESET COMMANDS (Run before session checks)
     const session = getSession(remoteJid);
