@@ -177,7 +177,6 @@ const handleMessage = async (msg) => {
 };
 
 // --- User Session Tracking for Booking Flow ---
-// --- User Session Tracking for Booking Flow ---
 const userSessions = {}; // { remoteJid: { step, barberId, barberName, date, hour, customerName, lastUpdated } }
 
 const SESSION_TIMEOUT = 5 * 60 * 1000; // 5 minutes
@@ -255,7 +254,6 @@ const processBotLogic = async (remoteJid, text, msg) => {
         setSession(remoteJid, { step: prevStep });
 
         // Show appropriate message for previous step
-        // Show appropriate message for previous step
         if (prevStep === 'AWAITING_BARBER') {
             // Restore barbers from session or fetch fresh and store
             let barbers = session.tempBarbers;
@@ -275,18 +273,23 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 text: `⬅️ Tarih seçimine döndünüz.\n\n📅 Hangi gün?\n\n1️⃣ Bugün (${today})\n2️⃣ Yarın (${tomorrow})\n\nYazınız: *Bugün*, *Yarın* veya tarih`
             });
         } else if (prevStep === 'AWAITING_HOUR') {
-            // Dynamic hours
-            const settings = await getSettings();
-            const startHour = settings.appointmentStartHour || 9;
-            const endHour = settings.appointmentEndHour || 20;
+            // Fetch real available slots from DB
             let availableHours = [];
-            for (let h = startHour; h < endHour; h++) {
-                availableHours.push(`${h.toString().padStart(2, '0')}:00`);
+            try {
+                availableHours = await appointmentService.getAvailableSlots(session.date, session.barberId);
+            } catch (err) {
+                logger.error('Error fetching slots on back:', err);
             }
 
-            await sock.sendMessage(remoteJid, {
-                text: `⬅️ Saat seçimine döndünüz.\n\n⏰ Hangi saat?\n\n${availableHours.join(', ')}\n\nÖrnek: *14:30*`
-            });
+            if (availableHours.length === 0) {
+                await sock.sendMessage(remoteJid, {
+                    text: `⬅️ Saat seçimine döndünüz ama bu tarihte boş saat kalmamış.\n\nLütfen başka bir tarih seçiniz ("geri" yazarak).`
+                });
+            } else {
+                await sock.sendMessage(remoteJid, {
+                    text: `⬅️ Saat seçimine döndünüz.\n\n⏰ *Müsait Saatler:*\n${availableHours.join(', ')}\n\nÖrnek: *14* veya *14:00*`
+                });
+            }
         } else if (prevStep === 'AWAITING_NAME') {
             await sock.sendMessage(remoteJid, {
                 text: `⬅️ İsim girişine döndünüz.\n\n👤 Lütfen *adınızı ve soyadınızı* yazın:`
@@ -297,7 +300,6 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
     // --- BOOKING FLOW STATES ---
 
-    // Step: Waiting for Barber Selection
     // Step: Waiting for Barber Selection
     if (session.step === 'AWAITING_BARBER') {
         // Use stored barbers from session if available (to match index), otherwise fetch fresh
@@ -340,8 +342,9 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 dateOptions.push(`${i + 1}️⃣ ${dayName} (${dateStr})`);
             }
 
+            const displayBarberName = matchedBarber.name === 'Admin' ? 'Ramazan' : matchedBarber.name;
             await sock.sendMessage(remoteJid, {
-                text: `✅ *${matchedBarber.name}* seçildi.\n\n📅 *Lütfen Bir Tarih Seçiniz:*\n\n${dateOptions.join('\n')}\n\n👆 (Listeden numara veya tarih yazabilirsiniz)`
+                text: `✅ *${displayBarberName}* seçildi.\n\n📅 *Lütfen Bir Tarih Seçiniz:*\n\n${dateOptions.join('\n')}\n\n👆 (Listeden numara veya tarih yazabilirsiniz)`
             });
         } else {
             // Need fresh barbers list for display if not in session, but we defined const barbers above
@@ -384,11 +387,11 @@ const processBotLogic = async (remoteJid, text, msg) => {
             }
 
             if (availableHours.length === 0) {
+                // Reset step back to AWAITING_DATE so user can pick another date
+                setSession(remoteJid, { step: 'AWAITING_DATE' });
                 await sock.sendMessage(remoteJid, {
-                    text: `📅 *${selectedDate}* tarihinde maalesef boş randevu saati kalmamıştır.\n\nLütfen başka bir tarih seçiniz.`
+                    text: `📅 *${selectedDate}* tarihinde maalesef boş randevu saati kalmamıştır.\n\nLütfen başka bir tarih seçiniz (1-7 arası numara veya Bugün/Yarın yazabilirsiniz).`
                 });
-                // Stay in AWAITING_DATE or go back? Stay is better so they can type another date
-                // But we need to make sure they know they can type a date
                 return;
             }
 
@@ -447,8 +450,9 @@ const processBotLogic = async (remoteJid, text, msg) => {
             setSession(remoteJid, { step: 'CONFIRMING', customerName: text });
             const s = getSession(remoteJid);
 
+            const displayName = s.barberName === 'Admin' ? 'Ramazan' : s.barberName;
             await sock.sendMessage(remoteJid, {
-                text: `📋 *Randevu Özeti:*\n\n👤 Ad: ${s.customerName}\n✂️ Berber: ${s.barberName}\n📅 Tarih: ${s.date}\n⏰ Saat: ${s.hour}\n\n✅ Onaylamak için *EVET* yazın.\n❌ İptal için *İPTAL* yazın.`
+                text: `📋 *Randevu Özeti:*\n\n👤 Ad: ${s.customerName}\n✂️ Berber: ${displayName}\n📅 Tarih: ${s.date}\n⏰ Saat: ${s.hour}\n\n✅ Onaylamak için *EVET* yazın.\n❌ İptal için *İPTAL* yazın.`
             });
         } else {
             await sock.sendMessage(remoteJid, {
@@ -479,8 +483,9 @@ const processBotLogic = async (remoteJid, text, msg) => {
                     createdFrom: 'whatsapp'
                 });
 
+                const displayName = s.barberName === 'Admin' ? 'Ramazan' : s.barberName;
                 await sock.sendMessage(remoteJid, {
-                    text: `🎉 *Randevunuz başarıyla oluşturuldu!*\n\n👤 ${s.customerName}\n✂️ ${s.barberName}\n📅 ${s.date} - ${s.hour}\n\n📍 Adres: ${CONFIG.location.address}\n\nBizi tercih ettiğiniz için teşekkürler! 💈`
+                    text: `🎉 *Randevunuz başarıyla oluşturuldu!*\n\n👤 ${s.customerName}\n✂️ ${displayName}\n📅 ${s.date} - ${s.hour}\n\n📍 Adres: ${CONFIG.location.address}\n\nBizi tercih ettiğiniz için teşekkürler! 💈`
                 });
 
                 // Notify admin about new appointment
