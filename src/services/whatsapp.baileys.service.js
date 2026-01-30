@@ -208,20 +208,27 @@ const processBotLogic = async (remoteJid, text, msg) => {
     const lowerText = text.toLowerCase().trim();
 
     // PRIORITY 1: GLOBAL RESET COMMANDS (Run before session checks)
-    // If user says "merhaba", "randevu", "konum" etc., ALWAYS reset flow unless it's a specific answer
-    const globalKeywords = ['merhaba', 'selam', 'hi', 'başla', 'menu', 'menü'];
-    if (globalKeywords.some(w => lowerText === w || lowerText.startsWith(w + ' '))) {
-        clearSession(remoteJid);
-        // Let it fall through to main handlers
-        // But force step to IDLE essentially
-    }
-
-    // Special case: If user says "randevu" while in "AWAITING_BARBER", maybe they just want to restart?
-    if (lowerText === 'randevu') {
-        clearSession(remoteJid);
-    }
-
     const session = getSession(remoteJid);
+    const globalKeywords = ['merhaba', 'selam', 'hi', 'başla', 'menu', 'menü', 'randevu', 'konum', 'bilgi'];
+
+    // Check if user is trying to run a global command while in an active session
+    if (session.step !== 'IDLE' && globalKeywords.some(w => lowerText === w || lowerText.startsWith(w + ' '))) {
+        // Allow cancellation or back
+        if (lowerText === 'iptal' || lowerText === 'vazgeç' || lowerText === 'geri' || lowerText === 'önceki') {
+            // Pass through to specific handlers below
+        } else {
+            // Block interruption
+            await sock.sendMessage(remoteJid, {
+                text: `⚠️ Şu an devam eden bir randevu işleminiz var.\n\nİşlemi tamamlamak için lütfen istenen bilgiyi girin.\n❌ İptal etmek için *iptal* yazın.`
+            });
+            return;
+        }
+    }
+
+    // Normal global command handling (ONLY if IDLE)
+    if (session.step === 'IDLE' && globalKeywords.some(w => lowerText === w || lowerText.startsWith(w + ' '))) {
+        clearSession(remoteJid);
+    }
 
     // Cancel command - reset flow anytime
     if (lowerText === 'iptal' || lowerText === 'vazgeç') {
@@ -249,7 +256,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
         if (prevStep === 'AWAITING_BARBER') {
             const barbers = await getActiveBarbers();
             await sock.sendMessage(remoteJid, {
-                text: `⬅️ Berber seçimine döndünüz.\n\n*Aktif Berberlerimiz:*\n${barbers.map(b => `• ${b.name}`).join('\n')}\n\n👆 Lütfen berberin ismini yazın.`
+                text: `⬅️ Berber seçimine döndünüz.\n\n*Aktif Berberlerimiz:*\n${barbers.map((b, i) => `${i + 1}️⃣ ${b.name === 'Admin' ? 'Ramazan' : b.name}`).join('\n')}\n\n👆 Lütfen berberin numarasını veya ismini yazın.`
             });
         } else if (prevStep === 'AWAITING_DATE') {
             const today = format(new Date(), 'yyyy-MM-dd');
@@ -275,7 +282,18 @@ const processBotLogic = async (remoteJid, text, msg) => {
     // Step: Waiting for Barber Selection
     if (session.step === 'AWAITING_BARBER') {
         const barbers = await getActiveBarbers();
-        const matchedBarber = barbers.find(b => b.name.toLowerCase() === lowerText);
+
+        let matchedBarber = null;
+        const selectionIndex = parseInt(lowerText) - 1;
+
+        if (!isNaN(selectionIndex) && selectionIndex >= 0 && selectionIndex < barbers.length) {
+            matchedBarber = barbers[selectionIndex];
+        } else {
+            matchedBarber = barbers.find(b => {
+                const nameToCheck = b.name === 'Admin' ? 'ramazan' : b.name.toLowerCase();
+                return nameToCheck === lowerText;
+            });
+        }
 
         if (matchedBarber) {
             setSession(remoteJid, {
@@ -302,7 +320,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
             });
         } else {
             await sock.sendMessage(remoteJid, {
-                text: `⚠️ "${text}" isimli bir berber bulunamadı.\n\nLütfen listeden bir berber seçin:\n${barbers.map(b => `- ${b.name}`).join('\n')}\n\n(İptal için "iptal" yazın)`
+                text: `⚠️ "${text}" geçerli bir seçim değil.\n\nLütfen listeden bir berber seçin (Numara veya İsim):\n${barbers.map((b, i) => `${i + 1}️⃣ ${b.name === 'Admin' ? 'Ramazan' : b.name}`).join('\n')}\n\n(İptal için "iptal" yazın)`
             });
         }
         return;
@@ -444,7 +462,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
         setSession(remoteJid, { step: 'AWAITING_BARBER' });
         await sock.sendMessage(remoteJid, {
-            text: `Randevu işlemlerine başlayalım. ✂️\n\n*Aktif Berberlerimiz:*\n${barbers.map(b => `• ${b.name}`).join('\n')}\n\n👆 Lütfen randevu almak istediğiniz *berberin ismini* yazın.`
+            text: `Randevu işlemlerine başlayalım. ✂️\n\n*Aktif Berberlerimiz:*\n${barbers.map((b, i) => `${i + 1}️⃣ ${b.name === 'Admin' ? 'Ramazan' : b.name}`).join('\n')}\n\n👆 Lütfen randevu almak istediğiniz *berberin numarasını* (1, 2...) yazın veya ismini yazın.`
         });
         return;
     }
@@ -466,7 +484,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
         infoText += `🌐 *Website:* ${CONFIG.website}\n`;
         infoText += `📞 *Telefon:* ${CONFIG.phone}\n\n`;
         if (barbers.length > 0) {
-            infoText += `✂️ *Berberlerimiz:*\n${barbers.map(b => `• ${b.name}`).join('\n')}\n\n`;
+            infoText += `✂️ *Berberlerimiz:*\n${barbers.map(b => `• ${b.name === 'Admin' ? 'Ramazan' : b.name}`).join('\n')}\n\n`;
         }
         if (services.length > 0) {
             infoText += `💇 *Hizmetlerimiz:*\n${services.map(s => `• ${s.name} - ${s.price}₺`).join('\n')}`;
