@@ -17,6 +17,7 @@ const getBusinessHours = async () => {
 const generateSlots = (start, end) => {
     const slots = [];
     for (let i = start; i < end; i++) {
+        // Only Full Hours
         const hourString = `${i.toString().padStart(2, '0')}:00`;
         slots.push(hourString);
     }
@@ -39,23 +40,38 @@ const getAvailableSlots = async (date, barberId) => {
     const { start, end } = await getBusinessHours();
     const allSlots = generateSlots(start, end);
 
-    // Build query
+    // Build query - Check confirmed reservations for this date
+    // Important: We must filter by barberId if provided, otherwise check ALL appointments if user hasn't selected a barber (but in our flow they always do)
     const query = {
         date: date,
         status: 'confirmed'
     };
 
-    // If a specific barber is selected, check ONLY their schedule
     if (barberId) {
         query.barberId = barberId;
     }
-    // If no barber selected (Legacy), we check ALL appointments to be safe
-    // Or we could say "Any barber free?" but for now let's keep conservative.
 
     const bookedAppointments = await Appointment.find(query).select('hour');
-
     const bookedHours = bookedAppointments.map(app => app.hour);
-    const availableSlots = allSlots.filter(slot => !bookedHours.includes(slot));
+
+    // Filter out booked slots
+    let availableSlots = allSlots.filter(slot => !bookedHours.includes(slot));
+
+    // Filter out past hours if date is today
+    const today = new Date();
+    const dateStr = today.toISOString().split('T')[0];
+
+    if (date === dateStr) {
+        const currentHour = today.getHours();
+        const currentMinute = today.getMinutes();
+        // Allow booking at least 30 mins in advance? logic:
+        // simple logic: remove slots where hour < currentHour
+        // or hour == currentHour but passed
+        availableSlots = availableSlots.filter(slot => {
+            const [h, m] = slot.split(':').map(Number);
+            return h > currentHour; // Only future hours
+        });
+    }
 
     return availableSlots;
 };

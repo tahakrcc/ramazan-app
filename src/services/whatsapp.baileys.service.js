@@ -211,7 +211,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
     // PRIORITY 1: GLOBAL RESET COMMANDS (Run before session checks)
     const session = getSession(remoteJid);
-    const globalKeywords = ['merhaba', 'selam', 'hi', 'başla', 'menu', 'menü', 'randevu', 'konum', 'bilgi'];
+    const globalKeywords = ['merhaba', 'selam', 'hi', 'başla', 'menu', 'menü', 'randevu', 'konum', 'bilgi', 'şikayet', 'sikayet', 'öneri'];
 
     // Check if user is trying to run a global command while in an active session
     if (session.step !== 'IDLE' && globalKeywords.some(w => lowerText.includes(w))) {
@@ -373,17 +373,27 @@ const processBotLogic = async (remoteJid, text, msg) => {
         if (selectedDate) {
             setSession(remoteJid, { step: 'AWAITING_HOUR', date: selectedDate });
 
-            // Generate dynamic hours from settings (Full hours only)
-            const startHour = settings.appointmentStartHour || 9; // Default 9:00
-            const endHour = settings.appointmentEndHour || 20;    // Default 20:00
+            // Fetch REAL availability from database
             let availableHours = [];
+            try {
+                // Determine barberId - if not in session, we have a problem, but it should be there
+                availableHours = await appointmentService.getAvailableSlots(selectedDate, getSession(remoteJid).barberId);
+            } catch (err) {
+                logger.error('Error fetching slots:', err);
+                availableHours = []; // Fallback
+            }
 
-            for (let h = startHour; h < endHour; h++) {
-                availableHours.push(`${h.toString().padStart(2, '0')}:00`);
+            if (availableHours.length === 0) {
+                await sock.sendMessage(remoteJid, {
+                    text: `📅 *${selectedDate}* tarihinde maalesef boş randevu saati kalmamıştır.\n\nLütfen başka bir tarih seçiniz.`
+                });
+                // Stay in AWAITING_DATE or go back? Stay is better so they can type another date
+                // But we need to make sure they know they can type a date
+                return;
             }
 
             await sock.sendMessage(remoteJid, {
-                text: `📅 *${selectedDate}* tarihi seçildi.\n\n⏰ Lütfen aşağıdaki saatlerden birini seçiniz:\n\n${availableHours.join(', ')}\n\n(Veya farklı bir saat yazabilirsiniz)`
+                text: `📅 *${selectedDate}* tarihi seçildi.\n\n⏰ *Müsait Saatler:*\n${availableHours.join(', ')}\n\nLütfen yukarıdaki saatlerden birini yazın (Örn: 14:00 veya sadece 14)`
             });
         } else {
             await sock.sendMessage(remoteJid, {
@@ -395,9 +405,29 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
     // Step: Waiting for Hour Selection
     if (session.step === 'AWAITING_HOUR') {
-        const hourMatch = text.match(/(\d{1,2})[:\.](\d{2})/);
-        if (hourMatch) {
-            const hour = `${hourMatch[1].padStart(2, '0')}:${hourMatch[2]}`;
+        let hour = null;
+
+        // 1. Try HH:MM format
+        const matchColon = text.match(/^(\d{1,2})[:\.](\d{2})$/);
+        // 2. Try single number (HH) format (e.g. "10", "14")
+        const matchSingle = text.match(/^(\d{1,2})$/);
+
+        if (matchColon) {
+            hour = `${matchColon[1].padStart(2, '0')}:${matchColon[2]}`;
+        } else if (matchSingle) {
+            hour = `${matchSingle[1].padStart(2, '0')}:00`;
+        }
+
+        if (hour) {
+            // Validate availability one last time
+            const slots = await appointmentService.getAvailableSlots(session.date, session.barberId);
+            if (!slots.includes(hour)) {
+                await sock.sendMessage(remoteJid, {
+                    text: `⚠️ *${hour}* saati maalesef doludur veya seçilemez.\n\nLütfen listedeki boş saatlerden birini seçiniz:\n${slots.join(', ')}`
+                });
+                return;
+            }
+
             setSession(remoteJid, { step: 'AWAITING_NAME', hour });
 
             await sock.sendMessage(remoteJid, {
@@ -405,7 +435,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
             });
         } else {
             await sock.sendMessage(remoteJid, {
-                text: `⚠️ Geçersiz saat formatı.\n\nLütfen saat:dakika şeklinde yazın. Örnek: *14:30*`
+                text: `⚠️ Geçersiz saat formatı.\n\nLütfen saati şu şekillerde yazabilirsiniz:\n- *14:00*\n- *14*\n- *10*`
             });
         }
         return;
@@ -472,6 +502,19 @@ const processBotLogic = async (remoteJid, text, msg) => {
         return;
     }
 
+    // Step: Complaint/Feedback
+    if (session.step === 'AWAITING_COMPLAINT') {
+        // Send to admin
+        await notifyAdmin(`📩 *Yeni Şikayet/Öneri*\n\nKimden: ${remoteJid.split('@')[0]}\nMesaj: ${text}`);
+
+        await sock.sendMessage(remoteJid, {
+            text: `✅ Mesajınız yetkililere iletilmiştir.\n\nGeri bildiriminiz için teşekkür ederiz. 🙏`
+        });
+        clearSession(remoteJid);
+        return;
+    }
+
+
     // --- MAIN MENU COMMANDS (when not in a flow) ---
 
     // Greeting Handler
@@ -479,7 +522,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
     if (greetings.some(g => lowerText.includes(g))) {
         clearSession(remoteJid);
         await sock.sendMessage(remoteJid, {
-            text: `Merhaba! 👋 Hoş geldiniz.\n\nSize nasıl yardımcı olabilirim?\n\n📅 *Randevu almak için:* "Randevu" yazın\n📍 *Konum bilgisi için:* "Konum" yazın\n❓ *Bilgi için:* "Bilgi" yazın`
+            text: `Merhaba! 👋 Hoş geldiniz.\n\nSize nasıl yardımcı olabilirim?\n\n📅 *Randevu almak için:* "Randevu" yazın\n📍 *Konum bilgisi için:* "Konum" yazın\n❓ *Bilgi için:* "Bilgi" yazın\n📣 *Şikayet/Öneri için:* "Şikayet" yazın`
         });
         return;
     }
@@ -530,10 +573,19 @@ const processBotLogic = async (remoteJid, text, msg) => {
         return;
     }
 
+    // Complaint Handler
+    if (lowerText.includes('şikayet') || lowerText.includes('sikayet') || lowerText.includes('öneri')) {
+        setSession(remoteJid, { step: 'AWAITING_COMPLAINT' });
+        await sock.sendMessage(remoteJid, {
+            text: `📣 *Şikayet ve Önerileriniz bizim için değerli.*\n\nLütfen mesajınızı tek bir parça halinde yazınız, yetkililere iletilecektir:`
+        });
+        return;
+    }
+
     // Default Fallback (only for DMs, not groups)
     if (!msg.key.participant) {
         await sock.sendMessage(remoteJid, {
-            text: `Anlayamadım. 🤖\n\nLütfen aşağıdaki komutlardan birini deneyin:\n• *Randevu* - Randevu almak için\n• *Konum* - Adres bilgisi için`
+            text: `Anlayamadım. 🤖\n\nLütfen aşağıdaki komutlardan birini deneyin:\n• *Randevu* - Randevu almak için\n• *Konum* - Adres bilgisi için\n• *Şikayet* - Şikayet/Öneri iletmek için`
         });
     }
 };
