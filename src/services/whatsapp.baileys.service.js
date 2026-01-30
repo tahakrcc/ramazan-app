@@ -57,7 +57,7 @@ const notifyAdmin = async (message) => {
 };
 
 const parseDateInput = (input) => {
-    const lower = input.toLowerCase();
+    const lower = input.toLocaleLowerCase('tr-TR');
     const today = new Date();
     if (lower.includes('bugün')) return format(today, 'yyyy-MM-dd');
     if (lower.includes('yarın')) return format(addDays(today, 1), 'yyyy-MM-dd');
@@ -291,7 +291,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
             matchedBarber = barbers[selectionIndex];
         } else {
             matchedBarber = barbers.find(b => {
-                const nameToCheck = b.name === 'Admin' ? 'ramazan' : b.name.toLowerCase();
+                const nameToCheck = b.name === 'Admin' ? 'ramazan' : b.name.toLocaleLowerCase('tr-TR');
                 return nameToCheck === lowerText;
             });
         }
