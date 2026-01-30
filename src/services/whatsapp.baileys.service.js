@@ -282,7 +282,6 @@ const processBotLogic = async (remoteJid, text, msg) => {
             let availableHours = [];
             for (let h = startHour; h < endHour; h++) {
                 availableHours.push(`${h.toString().padStart(2, '0')}:00`);
-                availableHours.push(`${h.toString().padStart(2, '0')}:30`);
             }
 
             await sock.sendMessage(remoteJid, {
@@ -374,14 +373,13 @@ const processBotLogic = async (remoteJid, text, msg) => {
         if (selectedDate) {
             setSession(remoteJid, { step: 'AWAITING_HOUR', date: selectedDate });
 
-            // Generate dynamic hours from settings
+            // Generate dynamic hours from settings (Full hours only)
             const startHour = settings.appointmentStartHour || 9; // Default 9:00
             const endHour = settings.appointmentEndHour || 20;    // Default 20:00
             let availableHours = [];
 
             for (let h = startHour; h < endHour; h++) {
                 availableHours.push(`${h.toString().padStart(2, '0')}:00`);
-                availableHours.push(`${h.toString().padStart(2, '0')}:30`);
             }
 
             await sock.sendMessage(remoteJid, {
