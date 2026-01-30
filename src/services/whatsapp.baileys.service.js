@@ -317,7 +317,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
             }
 
             await sock.sendMessage(remoteJid, {
-                text: `✅ *${matchedBarber.name}* seçildi.\n\n📅 Hangi gün randevu almak istersiniz?\n\n${dateOptions.join('\n')}\n\n👆 Numara yazın (1-${dateOptions.length}) veya tarih yazın`
+                text: `✅ *${matchedBarber.name}* seçildi.\n\n📅 *Lütfen Bir Tarih Seçiniz:*\n\n${dateOptions.join('\n')}\n\n👆 (Listeden numara veya tarih yazabilirsiniz)`
             });
         } else {
             await sock.sendMessage(remoteJid, {
@@ -348,11 +348,18 @@ const processBotLogic = async (remoteJid, text, msg) => {
         if (selectedDate) {
             setSession(remoteJid, { step: 'AWAITING_HOUR', date: selectedDate });
 
-            // Get available hours (simple version - all hours)
-            const availableHours = ['10:00', '10:30', '11:00', '11:30', '12:00', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00'];
+            // Generate dynamic hours from settings
+            const startHour = settings.appointmentStartHour || 9; // Default 9:00
+            const endHour = settings.appointmentEndHour || 20;    // Default 20:00
+            let availableHours = [];
+
+            for (let h = startHour; h < endHour; h++) {
+                availableHours.push(`${h.toString().padStart(2, '0')}:00`);
+                availableHours.push(`${h.toString().padStart(2, '0')}:30`);
+            }
 
             await sock.sendMessage(remoteJid, {
-                text: `📅 *${selectedDate}* tarihi seçildi.\n\n⏰ Hangi saati tercih edersiniz?\n\n${availableHours.join(', ')}\n\nÖrnek: *14:30*`
+                text: `📅 *${selectedDate}* tarihi seçildi.\n\n⏰ Lütfen aşağıdaki saatlerden birini seçiniz:\n\n${availableHours.join(', ')}\n\n(Veya farklı bir saat yazabilirsiniz)`
             });
         } else {
             await sock.sendMessage(remoteJid, {
