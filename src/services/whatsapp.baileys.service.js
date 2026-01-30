@@ -176,15 +176,51 @@ const handleMessage = async (msg) => {
 };
 
 // --- User Session Tracking for Booking Flow ---
-const userSessions = {}; // { remoteJid: { step, barberId, barberName, date, hour, customerName } }
+// --- User Session Tracking for Booking Flow ---
+const userSessions = {}; // { remoteJid: { step, barberId, barberName, date, hour, customerName, lastUpdated } }
 
-const getSession = (jid) => userSessions[jid] || { step: 'IDLE' };
-const setSession = (jid, data) => { userSessions[jid] = { ...getSession(jid), ...data }; };
+const SESSION_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+
+const getSession = (jid) => {
+    const session = userSessions[jid];
+    if (!session) return { step: 'IDLE' };
+
+    // Check timeout
+    if (Date.now() - session.lastUpdated > SESSION_TIMEOUT) {
+        delete userSessions[jid];
+        return { step: 'IDLE' };
+    }
+    return session;
+};
+
+const setSession = (jid, data) => {
+    userSessions[jid] = {
+        ...getSession(jid),
+        ...data,
+        lastUpdated: Date.now()
+    };
+};
+
 const clearSession = (jid) => { delete userSessions[jid]; };
 
 // --- Bot Logic with Booking Flow ---
 const processBotLogic = async (remoteJid, text, msg) => {
     const lowerText = text.toLowerCase().trim();
+
+    // PRIORITY 1: GLOBAL RESET COMMANDS (Run before session checks)
+    // If user says "merhaba", "randevu", "konum" etc., ALWAYS reset flow unless it's a specific answer
+    const globalKeywords = ['merhaba', 'selam', 'hi', 'başla', 'menu', 'menü'];
+    if (globalKeywords.some(w => lowerText === w || lowerText.startsWith(w + ' '))) {
+        clearSession(remoteJid);
+        // Let it fall through to main handlers
+        // But force step to IDLE essentially
+    }
+
+    // Special case: If user says "randevu" while in "AWAITING_BARBER", maybe they just want to restart?
+    if (lowerText === 'randevu') {
+        clearSession(remoteJid);
+    }
+
     const session = getSession(remoteJid);
 
     // Cancel command - reset flow anytime
