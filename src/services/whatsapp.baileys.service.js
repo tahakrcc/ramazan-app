@@ -255,8 +255,16 @@ const processBotLogic = async (remoteJid, text, msg) => {
         setSession(remoteJid, { step: prevStep });
 
         // Show appropriate message for previous step
+        // Show appropriate message for previous step
         if (prevStep === 'AWAITING_BARBER') {
-            const barbers = await getActiveBarbers();
+            // Restore barbers from session or fetch fresh and store
+            let barbers = session.tempBarbers;
+            if (!barbers || barbers.length === 0) {
+                barbers = await getActiveBarbers();
+                // We must update session with this new list so index matches when user selects
+                setSession(remoteJid, { tempBarbers: barbers.map(b => ({ _id: b._id, name: b.name })) });
+            }
+
             await sock.sendMessage(remoteJid, {
                 text: `⬅️ Berber seçimine döndünüz.\n\n*Aktif Berberlerimiz:*\n${barbers.map((b, i) => `${i + 1}️⃣ ${b.name === 'Admin' ? 'Ramazan' : b.name}`).join('\n')}\n\n👆 Lütfen berberin numarasını veya ismini yazın.`
             });
@@ -267,7 +275,16 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 text: `⬅️ Tarih seçimine döndünüz.\n\n📅 Hangi gün?\n\n1️⃣ Bugün (${today})\n2️⃣ Yarın (${tomorrow})\n\nYazınız: *Bugün*, *Yarın* veya tarih`
             });
         } else if (prevStep === 'AWAITING_HOUR') {
-            const availableHours = ['10:00', '10:30', '11:00', '11:30', '12:00', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00'];
+            // Dynamic hours
+            const settings = await getSettings();
+            const startHour = settings.appointmentStartHour || 9;
+            const endHour = settings.appointmentEndHour || 20;
+            let availableHours = [];
+            for (let h = startHour; h < endHour; h++) {
+                availableHours.push(`${h.toString().padStart(2, '0')}:00`);
+                availableHours.push(`${h.toString().padStart(2, '0')}:30`);
+            }
+
             await sock.sendMessage(remoteJid, {
                 text: `⬅️ Saat seçimine döndünüz.\n\n⏰ Hangi saat?\n\n${availableHours.join(', ')}\n\nÖrnek: *14:30*`
             });
