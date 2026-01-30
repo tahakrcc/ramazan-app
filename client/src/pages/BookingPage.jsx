@@ -25,17 +25,20 @@ const BookingPage = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [services, setServices] = useState([]);
     const [feedbacks, setFeedbacks] = useState([]);
+    const [settings, setSettings] = useState({ bookingRangeDays: 14 }); // Dynamic settings
 
-    // Initial Load Animation & Fetch Services & Feedbacks
+    // Initial Load Animation & Fetch Services & Feedbacks & Settings
     useEffect(() => {
         const loadData = async () => {
             try {
-                const [servicesRes, feedbacksRes] = await Promise.all([
+                const [servicesRes, feedbacksRes, settingsRes] = await Promise.all([
                     API.get('/appointments/services'),
-                    API.get('/feedbacks/approved')
+                    API.get('/feedbacks/approved'),
+                    API.get('/settings/public')
                 ]);
                 setServices(servicesRes.data);
                 setFeedbacks(feedbacksRes.data);
+                setSettings(settingsRes.data);
             } catch (error) {
                 console.error('Failed to load data', error);
                 // Fallback if API fails
@@ -70,7 +73,7 @@ const BookingPage = () => {
                 {step === 0 ? (
                     <LandingView key="landing" onStart={() => setStep(1)} services={services} feedbacks={feedbacks} />
                 ) : (
-                    <BookingFlow key="booking" onBack={() => setStep(0)} services={services} />
+                    <BookingFlow key="booking" onBack={() => setStep(0)} services={services} settings={settings} />
                 )}
             </AnimatePresence>
         </div>
@@ -347,7 +350,7 @@ const FeedbackSection = ({ feedbacks }) => {
     );
 };
 
-const BookingFlow = ({ onBack, services }) => {
+const BookingFlow = ({ onBack, services, settings }) => {
     // 0: Person Count, 1: Service, 1.5: Barber, 2: Date/Time, 3: Form, 4: Success
     const [bookingStep, setBookingStep] = useState(0);
     const [isDoubleBooking, setIsDoubleBooking] = useState(false);
@@ -635,7 +638,7 @@ const BookingFlow = ({ onBack, services }) => {
                                 </button>
 
                                 <div id="date-scroller" className="flex gap-3 md:gap-4 overflow-x-auto pb-8 mb-8 hide-scrollbar px-1 scroll-smooth">
-                                    {Array.from({ length: 14 }).map((_, i) => {
+                                    {Array.from({ length: settings?.bookingRangeDays || 14 }).map((_, i) => {
                                         const d = format(addDays(new Date(), i), 'yyyy-MM-dd');
                                         const isSelected = selection.date === d;
                                         return (
