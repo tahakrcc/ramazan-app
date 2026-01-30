@@ -205,14 +205,15 @@ const clearSession = (jid) => { delete userSessions[jid]; };
 
 // --- Bot Logic with Booking Flow ---
 const processBotLogic = async (remoteJid, text, msg) => {
-    const lowerText = text.toLowerCase().trim();
+    // FIX: Use Turkish locale for correct case conversion (İ -> i, I -> ı)
+    const lowerText = text.toLocaleLowerCase('tr-TR').trim();
 
     // PRIORITY 1: GLOBAL RESET COMMANDS (Run before session checks)
     const session = getSession(remoteJid);
     const globalKeywords = ['merhaba', 'selam', 'hi', 'başla', 'menu', 'menü', 'randevu', 'konum', 'bilgi'];
 
     // Check if user is trying to run a global command while in an active session
-    if (session.step !== 'IDLE' && globalKeywords.some(w => lowerText === w || lowerText.startsWith(w + ' '))) {
+    if (session.step !== 'IDLE' && globalKeywords.some(w => lowerText.includes(w))) {
         // Allow cancellation or back
         if (lowerText === 'iptal' || lowerText === 'vazgeç' || lowerText === 'geri' || lowerText === 'önceki') {
             // Pass through to specific handlers below
