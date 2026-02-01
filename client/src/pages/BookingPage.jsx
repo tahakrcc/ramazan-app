@@ -474,7 +474,8 @@ const BookingFlow = ({ onBack, services, settings }) => {
             setBookingStep(4);
         } catch (error) {
             console.error(error);
-            toast.error('Hata oluştu. Seçilen saatler dolmuş olabilir.');
+            const errorMsg = error.response?.data?.error || error.message || 'Hata oluştu. Seçilen saatler dolmuş olabilir.';
+            toast.error(errorMsg);
         }
     };
 

@@ -596,7 +596,12 @@ const AppointmentsManager = () => {
                                         >
                                             {app.customerName}
                                         </button>
-                                        <div className="text-gray-500 text-xs">{app.phone}</div>
+                                        <a
+                                            href={`tel:${app.phone}`}
+                                            className="text-gold-400 hover:text-gold-300 text-xs transition-colors flex items-center gap-1"
+                                        >
+                                            📞 {app.phone ? `+${app.phone.slice(0, 2)} ${app.phone.slice(2, 5)} ${app.phone.slice(5, 8)} ${app.phone.slice(8, 10)} ${app.phone.slice(10)}`.trim() : 'N/A'}
+                                        </a>
                                     </td>
                                     <td className="p-4 md:p-6 hidden md:table-cell text-gray-400">{app.serviceId || 'Standart'}</td>
                                     <td className="p-4 md:p-6">
