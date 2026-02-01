@@ -581,6 +581,20 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 return;
             }
 
+            // Check if day of week is closed (e.g., Sunday)
+            const settings = await getSettings();
+            const closedWeekDays = settings.closedWeekDays || [0];
+            const selectedDateObj = new Date(selectedDate + 'T00:00:00');
+            const dayOfWeek = selectedDateObj.getDay();
+
+            if (closedWeekDays.includes(dayOfWeek)) {
+                const dayNames = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+                await sock.sendMessage(remoteJid, {
+                    text: `⚠️ *${dayNames[dayOfWeek]}* günleri açık değiliz.\n\nLütfen başka bir gün seçiniz.\n\n⬅️ Geri için "geri" yazın.`
+                });
+                return;
+            }
+
             setSession(remoteJid, { step: 'AWAITING_HOUR', date: selectedDate });
 
             // Fetch REAL availability from database
