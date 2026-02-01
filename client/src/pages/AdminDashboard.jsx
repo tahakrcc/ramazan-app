@@ -17,6 +17,28 @@ const IconX = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="2
 const IconPlus = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>;
 const IconUsers = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>;
 
+// Helper function to format Turkish phone numbers
+const formatPhone = (phone) => {
+    if (!phone) return 'N/A';
+    // Remove all non-digits
+    const digits = phone.replace(/\D/g, '');
+
+    // Turkish phone format: +90 5XX XXX XX XX
+    if (digits.startsWith('90') && digits.length === 12) {
+        // Format: 905XXXXXXXXX -> +90 5XX XXX XX XX
+        return `+90 ${digits.slice(2, 5)} ${digits.slice(5, 8)} ${digits.slice(8, 10)} ${digits.slice(10, 12)}`;
+    } else if (digits.startsWith('0') && digits.length === 11) {
+        // Format: 05XXXXXXXXX -> +90 5XX XXX XX XX
+        return `+90 ${digits.slice(1, 4)} ${digits.slice(4, 7)} ${digits.slice(7, 9)} ${digits.slice(9, 11)}`;
+    } else if (digits.startsWith('5') && digits.length === 10) {
+        // Format: 5XXXXXXXXX -> +90 5XX XXX XX XX
+        return `+90 ${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 8)} ${digits.slice(8, 10)}`;
+    }
+
+    // Return as-is if format unknown
+    return phone;
+};
+
 const AdminDashboard = () => {
     const [activeTab, setActiveTab] = useState('dashboard');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
