@@ -95,6 +95,11 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Root endpoint info
+app.get('/', (req, res) => {
+    res.send('Ramazan App API is running. <br> <a href="/health">Health Check</a>');
+});
+
 // Error Handler
 app.use(errorHandler);
 
