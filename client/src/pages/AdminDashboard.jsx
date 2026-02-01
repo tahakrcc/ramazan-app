@@ -713,7 +713,19 @@ const AppointmentsManager = () => {
                                 </div>
                                 <div>
                                     <label className="text-xs text-gray-400 mb-1 block pl-1">Saat</label>
-                                    <input type="time" required className="w-full bg-white/10 border border-white/20 p-3 rounded text-white focus:border-gold-500 outline-none transition-colors" value={manualForm.hour} onChange={e => setManualForm({ ...manualForm, hour: e.target.value })} />
+                                    <select
+                                        required
+                                        className="w-full bg-white/10 border border-white/20 p-3 rounded text-white focus:border-gold-500 outline-none transition-colors appearance-none"
+                                        value={manualForm.hour}
+                                        onChange={e => setManualForm({ ...manualForm, hour: e.target.value })}
+                                    >
+                                        <option value="">Seçiniz</option>
+                                        {Array.from({ length: 14 }, (_, i) => i + 9).map(h => (
+                                            <option key={h} value={`${String(h).padStart(2, '0')}:00`}>
+                                                {String(h).padStart(2, '0')}:00
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
                             </div>
 

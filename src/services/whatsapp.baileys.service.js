@@ -704,12 +704,22 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
             try {
                 // Extract phone from remoteJid (e.g., "905551234567@s.whatsapp.net" -> "905551234567")
-                const phone = remoteJid.split('@')[0];
+                let phone = remoteJid.split('@')[0];
+
+                // Helper to format phone for display (e.g. +90 5XX ...)
+                const formatPhoneDisplay = (p) => {
+                    if (p.startsWith('90') && p.length === 12) {
+                        return `+${p.slice(0, 2)} ${p.slice(2, 5)} ${p.slice(5, 8)} ${p.slice(8, 10)} ${p.slice(10)}`;
+                    }
+                    return p;
+                };
+
+                const formattedPhone = formatPhoneDisplay(phone);
 
                 // Create appointment via service
                 await appointmentService.createAppointment({
                     customerName: s.customerName,
-                    phone: phone,
+                    phone: phone, // Store as raw digits (standard)
                     date: s.date,
                     hour: s.hour,
                     barberId: s.barberId,
@@ -724,7 +734,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 });
 
                 // Notify admin about new appointment
-                await notifyAdmin(`🆕 *Yeni WhatsApp Randevusu!*\n\n👤 Müşteri: ${s.customerName}\n📱 Tel: ${phone}\n✂️ Berber: ${s.barberName}\n📅 Tarih: ${s.date}\n⏰ Saat: ${s.hour}`);
+                await notifyAdmin(`🆕 *Yeni WhatsApp Randevusu!*\n\n👤 Müşteri: ${s.customerName}\n📱 Tel: ${formattedPhone}\n✂️ Berber: ${s.barberName}\n📅 Tarih: ${s.date}\n⏰ Saat: ${s.hour}`);
 
                 clearSession(remoteJid);
             } catch (err) {
