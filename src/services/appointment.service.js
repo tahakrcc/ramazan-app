@@ -102,6 +102,17 @@ const createAppointment = async (data) => {
         throw new Error(`Seçilen tarih (${data.date}) işletmemiz kapalıdır: ${isClosed.reason}`);
     }
 
+    // Check if day of week is closed (e.g., Sunday)
+    const settings = await Settings.getSettings();
+    const closedWeekDays = settings.closedWeekDays || [0];
+    const dateObj = new Date(data.date + 'T00:00:00');
+    const dayOfWeek = dateObj.getDay();
+
+    if (closedWeekDays.includes(dayOfWeek)) {
+        const dayNames = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+        throw new Error(`${dayNames[dayOfWeek]} günleri açık değiliz. Lütfen başka bir gün seçiniz.`);
+    }
+
     // Manual Conflict Check (Multi-Barber Support)
     // We cannot rely solely on unique index anymore because multiple barbers can have same slot
     const conflictQuery = {
