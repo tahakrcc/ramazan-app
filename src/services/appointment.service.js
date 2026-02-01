@@ -122,11 +122,6 @@ const createAppointment = async (data) => {
     };
     if (data.barberId) {
         conflictQuery.barberId = data.barberId;
-    } else {
-        // Legacy: If no barber specified, global lock? 
-        // Or assume it's for the "default" admin?
-        // Let's assume conflict if ANYone is booked to be safe, or allow if we want overlapping.
-        // For safety, if no barberId, we assume single-resource mode.
     }
 
     const existing = await Appointment.findOne(conflictQuery);
