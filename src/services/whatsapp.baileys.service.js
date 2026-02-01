@@ -464,11 +464,20 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 // Get booking range from settings
                 const settings = await getSettings();
                 const maxDays = settings.bookingRangeDays || 14;
+                const closedWeekDays = settings.closedWeekDays || [0]; // Default: Sunday closed
 
-                // Build date options
+                // Build date options (skip closed week days like Sunday)
                 let dateOptions = [];
-                for (let i = 0; i < Math.min(maxDays, 7); i++) {
+                let optionCounter = 0;
+                for (let i = 0; i < maxDays && dateOptions.length < 7; i++) {
                     const d = addDays(new Date(), i);
+                    const dayOfWeek = d.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+
+                    // Skip if this day of week is closed
+                    if (closedWeekDays.includes(dayOfWeek)) {
+                        continue;
+                    }
+
                     const dateStr = format(d, 'yyyy-MM-dd');
                     // Safely handle locale - if undefined, just show date without day name
                     let dayName;
@@ -485,7 +494,8 @@ const processBotLogic = async (remoteJid, text, msg) => {
                             dayName = format(d, 'dd/MM');
                         }
                     }
-                    dateOptions.push(`${i + 1}️⃣ ${dayName} (${dateStr})`);
+                    optionCounter++;
+                    dateOptions.push(`${optionCounter}️⃣ ${dayName} (${dateStr})`);
                 }
 
                 const displayBarberName = matchedBarber.name === 'Admin' ? 'Ramazan' : matchedBarber.name;
