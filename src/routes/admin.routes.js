@@ -32,9 +32,9 @@ router.delete('/appointments/:id', protect, async (req, res, next) => {
             }
         }
 
-        await appointmentService.cancelAppointment(id);
-        logger.info(`Admin cancelled appointment: ${id} (User: ${req.user.username})`);
-        res.json({ message: 'Randevu iptal edildi.' });
+        await appointmentService.deleteAppointment(id);
+        logger.info(`Admin deleted appointment: ${id} (User: ${req.user.username})`);
+        res.json({ message: 'Randevu kalıcı olarak silindi.' });
     } catch (error) {
         next(error);
     }

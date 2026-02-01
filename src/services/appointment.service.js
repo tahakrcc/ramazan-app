@@ -256,6 +256,7 @@ module.exports = {
     createAppointment,
     getMyAppointment,
     cancelAppointment,
+    deleteAppointment,
     getCustomerHistory,
     getDailyAppointments,
     cleanupOldAppointments
