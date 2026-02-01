@@ -442,6 +442,8 @@ const AppointmentsManager = () => {
     const [manualForm, setManualForm] = useState({ customerName: '', phone: '', date: '', hour: '', notes: '', barberId: '' });
     const [barbers, setBarbers] = useState([]);
     const [selectedBarber, setSelectedBarber] = useState('');
+    const [availableSlots, setAvailableSlots] = useState([]);
+    const [loadingSlots, setLoadingSlots] = useState(false);
 
     useEffect(() => {
         const fetchBarbers = async () => {
@@ -476,6 +478,42 @@ const AppointmentsManager = () => {
             setManualForm(prev => ({ ...prev, barberId: selectedBarber }));
         }
     }, [selectedBarber, isEditMode]);
+
+    // Fetch available slots when date or barber changes in manual form
+    useEffect(() => {
+        const fetchSlots = async () => {
+            // Only fetch if date is selected. If barber is not selected, it fetches general availability.
+            if (!manualForm.date) {
+                setAvailableSlots([]);
+                return;
+            }
+
+            setLoadingSlots(true);
+            try {
+                // If editing, we might want to include the current slot even if "full" (because it's taken by this appt)
+                // But for simplicity, we just fetch available. The user can keep current hour if they don't change it.
+                // However, logic below resets if not in list? No, we should allow current value.
+
+                let url = `/appointments/available?date=${manualForm.date}`;
+                if (manualForm.barberId) {
+                    url += `&barberId=${manualForm.barberId}`;
+                }
+
+                const res = await API.get(url);
+                setAvailableSlots(res.data.availableSlots || []);
+            } catch (error) {
+                console.error('Error fetching slots:', error);
+                setAvailableSlots([]);
+            } finally {
+                setLoadingSlots(false);
+            }
+        };
+
+        // Debounce or just run? React 18 handles frequent updates well, but let's check basic validity
+        if (manualForm.date && manualForm.date.length === 10) {
+            fetchSlots();
+        }
+    }, [manualForm.date, manualForm.barberId]);
 
     // --- Handlers ---
 
@@ -718,13 +756,28 @@ const AppointmentsManager = () => {
                                         className="w-full bg-dark-900 border border-white/20 p-3 rounded text-white focus:border-gold-500 outline-none transition-colors appearance-none"
                                         value={manualForm.hour}
                                         onChange={e => setManualForm({ ...manualForm, hour: e.target.value })}
+                                        disabled={!manualForm.date || loadingSlots}
                                     >
-                                        <option className="bg-dark-900 text-white" value="">Seçiniz</option>
-                                        {Array.from({ length: 14 }, (_, i) => i + 9).map(h => (
-                                            <option className="bg-dark-900 text-white" key={h} value={`${String(h).padStart(2, '0')}:00`}>
-                                                {String(h).padStart(2, '0')}:00
+                                        <option className="bg-dark-900 text-white" value="">
+                                            {!manualForm.date ? 'Önce Tarih Seçiniz' : loadingSlots ? 'Yükleniyor...' : 'Seçiniz'}
+                                        </option>
+
+                                        {/* If editing, always show the current hour as an option even if strict availability doesn't return it */}
+                                        {isEditMode && manualForm.hour && !availableSlots.includes(manualForm.hour) && (
+                                            <option className="bg-dark-900 text-white" value={manualForm.hour}>
+                                                {manualForm.hour} (Şu anki)
+                                            </option>
+                                        )}
+
+                                        {availableSlots.map(h => (
+                                            <option className="bg-dark-900 text-white" key={h} value={h}>
+                                                {h}
                                             </option>
                                         ))}
+
+                                        {availableSlots.length === 0 && manualForm.date && !loadingSlots && (
+                                            <option className="bg-dark-900 text-white" disabled>Doluluk nedeniyle saat yok</option>
+                                        )}
                                     </select>
                                 </div>
                             </div>
