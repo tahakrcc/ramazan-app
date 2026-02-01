@@ -57,7 +57,12 @@ const getAvailableSlots = async (date, barberId) => {
     };
 
     if (barberId) {
-        query.barberId = barberId;
+        // Check for THIS barber OR Global Blocks (barberId is null)
+        query.$or = [
+            { barberId: barberId },
+            { barberId: null },
+            { barberId: { $exists: false } }
+        ];
     }
 
     const bookedAppointments = await Appointment.find(query).select('hour');
@@ -121,7 +126,13 @@ const createAppointment = async (data) => {
         status: 'confirmed'
     };
     if (data.barberId) {
-        conflictQuery.barberId = data.barberId;
+        // Updated Conflict Check:
+        // Must clash if slot is taken by SAME barber OR by a GLOBAL BLOCK (null)
+        conflictQuery.$or = [
+            { barberId: data.barberId },
+            { barberId: null },
+            { barberId: { $exists: false } }
+        ];
     }
 
     const existing = await Appointment.findOne(conflictQuery);
