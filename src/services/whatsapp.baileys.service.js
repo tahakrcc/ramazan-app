@@ -489,8 +489,9 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 }
 
                 const displayBarberName = matchedBarber.name === 'Admin' ? 'Ramazan' : matchedBarber.name;
+                const maxDateStr = format(addDays(new Date(), maxDays - 1), 'dd/MM/yyyy');
                 await sock.sendMessage(remoteJid, {
-                    text: `✅ *${displayBarberName}* seçildi.\n\n📅 *Lütfen Bir Tarih Seçiniz:*\n\n${dateOptions.join('\n')}\n\n👆 Numara veya tarih yazabilirsiniz.\n\n⬅️ Geri için "geri" yazın.`
+                    text: `✅ *${displayBarberName}* seçildi.\n\n📅 *Lütfen Bir Tarih Seçiniz:*\n\n${dateOptions.join('\n')}\n\n👆 Numara veya tarih yazabilirsiniz.\nℹ️ En geç ${maxDateStr} tarihine kadar randevu alabilirsiniz (${maxDays} gün).\n\n⬅️ Geri için "geri" yazın.`
                 });
 
                 logger.info(`Barber selected: ${displayBarberName} (${barberId}) for ${remoteJid}`);
