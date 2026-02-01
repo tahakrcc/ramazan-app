@@ -8,6 +8,7 @@ const Appointment = require('../models/appointment.model');
 const ClosedDate = require('../models/closedDate.model');
 const BotState = require('../models/botState.model');
 const Feedback = require('../models/feedback.model');
+const Complaint = require('../models/complaint.model');
 const appointmentService = require('./appointment.service');
 const { format, addDays } = require('date-fns');
 // date-fns v3+ uses named exports from locale package
@@ -703,13 +704,37 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
     // Step: Complaint/Feedback
     if (session.step === 'AWAITING_COMPLAINT') {
-        // Send to admin
-        await notifyAdmin(`📩 *Yeni Şikayet/Öneri*\n\nKimden: ${remoteJid.split('@')[0]}\nMesaj: ${text}`);
+        const phone = remoteJid.split('@')[0];
 
-        await sock.sendMessage(remoteJid, {
-            text: `✅ Mesajınız yetkililere iletilmiştir.\n\nGeri bildiriminiz için teşekkür ederiz. 🙏`
-        });
-        clearSession(remoteJid);
+        try {
+            // Get last appointment for customer info
+            const lastAppt = await Appointment.findOne({
+                phone: { $regex: phone.slice(-10) }
+            }).sort({ date: -1, hour: -1 });
+
+            // Save complaint to database
+            await Complaint.create({
+                customerName: lastAppt?.customerName || 'WhatsApp Kullanıcısı',
+                phone: phone,
+                message: text,
+                status: 'pending',
+                source: 'whatsapp'
+            });
+
+            // Notify admin with phone number
+            await notifyAdmin(`📩 *Yeni Şikayet/Öneri*\n\nTelefon: ${phone}\nİsim: ${lastAppt?.customerName || 'Bilinmiyor'}\nMesaj: ${text}`);
+
+            await sock.sendMessage(remoteJid, {
+                text: `✅ Mesajınız yetkililere iletilmiştir.\n\nGeri bildiriminiz için teşekkür ederiz. 🙏`
+            });
+            clearSession(remoteJid);
+        } catch (err) {
+            logger.error('Complaint save error:', err);
+            await sock.sendMessage(remoteJid, {
+                text: `⚠️ Mesajınız iletilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.`
+            });
+            clearSession(remoteJid);
+        }
         return;
     }
 

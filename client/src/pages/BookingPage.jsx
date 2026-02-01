@@ -579,7 +579,7 @@ const BookingFlow = ({ onBack, services, settings }) => {
                                             {b.name.charAt(0).toUpperCase()}
                                         </div>
                                         <div>
-                                            <h3 className="text-xl font-serif text-white group-hover:text-gold-500 transition-colors">{b.name}</h3>
+                                            <h3 className="text-xl font-serif text-white group-hover:text-gold-500 transition-colors">{b.name === 'Admin' ? 'Ramazan' : b.name}</h3>
                                             <p className="text-gray-400 text-xs uppercase tracking-widest">{b.role === 'ADMIN' ? 'Master Barber' : 'Barber'}</p>
                                         </div>
                                     </button>
