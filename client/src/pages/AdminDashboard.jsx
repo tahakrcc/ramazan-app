@@ -695,11 +695,11 @@ const AppointmentsManager = () => {
                                                 const b = barbers.find(bar => bar._id === e.target.value);
                                                 setManualForm({ ...manualForm, barberId: e.target.value, barberName: b ? b.name : '' });
                                             }}
-                                            className="w-full bg-white/10 border border-white/20 p-3 rounded text-white outline-none focus:border-gold-500"
+                                            className="w-full bg-dark-900 border border-white/20 p-3 rounded text-white outline-none focus:border-gold-500"
                                         >
-                                            <option value="">Personel Seçiniz (Opsiyonel)</option>
+                                            <option className="bg-dark-900 text-white" value="">Personel Seçiniz (Opsiyonel)</option>
                                             {barbers.map(b => (
-                                                <option key={b._id} value={b._id}>{b.name}</option>
+                                                <option className="bg-dark-900 text-white" key={b._id} value={b._id}>{b.name}</option>
                                             ))}
                                         </select>
                                     </div>
@@ -715,13 +715,13 @@ const AppointmentsManager = () => {
                                     <label className="text-xs text-gray-400 mb-1 block pl-1">Saat</label>
                                     <select
                                         required
-                                        className="w-full bg-white/10 border border-white/20 p-3 rounded text-white focus:border-gold-500 outline-none transition-colors appearance-none"
+                                        className="w-full bg-dark-900 border border-white/20 p-3 rounded text-white focus:border-gold-500 outline-none transition-colors appearance-none"
                                         value={manualForm.hour}
                                         onChange={e => setManualForm({ ...manualForm, hour: e.target.value })}
                                     >
-                                        <option value="">Seçiniz</option>
+                                        <option className="bg-dark-900 text-white" value="">Seçiniz</option>
                                         {Array.from({ length: 14 }, (_, i) => i + 9).map(h => (
-                                            <option key={h} value={`${String(h).padStart(2, '0')}:00`}>
+                                            <option className="bg-dark-900 text-white" key={h} value={`${String(h).padStart(2, '0')}:00`}>
                                                 {String(h).padStart(2, '0')}:00
                                             </option>
                                         ))}

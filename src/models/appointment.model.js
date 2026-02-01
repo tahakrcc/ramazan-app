@@ -66,7 +66,11 @@ const appointmentSchema = new mongoose.Schema({
 // ZERO-TOLERANCE UNIQUE INDEX
 // Creates a compound unique index on date, hour and barber.
 // If two requests try to book the same slot for the same barber, MongoDB will reject.
-appointmentSchema.index({ date: 1, hour: 1, barberId: 1 }, { unique: true });
+// UPDATE: Added partialFilterExpression to allow 'cancelled' appointments to exist without blocking new ones.
+appointmentSchema.index({ date: 1, hour: 1, barberId: 1 }, {
+  unique: true,
+  partialFilterExpression: { status: 'confirmed' }
+});
 
 // Try to drop old index (Best effort, runs once on module load? No, models load on startup)
 // We rely on Mongoose sync or manual migration.
