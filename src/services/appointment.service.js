@@ -36,7 +36,16 @@ const getAvailableSlots = async (date, barberId) => {
         return []; // No slots available on holidays
     }
 
-    // 2. Get Settings
+    // 2. Check if day of week is closed (e.g., Sunday)
+    const settings = await Settings.getSettings();
+    const dateObj = new Date(date + 'T00:00:00');
+    const dayOfWeek = dateObj.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+
+    if (settings.closedWeekDays && settings.closedWeekDays.includes(dayOfWeek)) {
+        return []; // No slots on closed week days (e.g., Sundays)
+    }
+
+    // 3. Get Settings
     const { start, end } = await getBusinessHours();
     const allSlots = generateSlots(start, end);
 
