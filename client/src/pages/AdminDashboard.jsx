@@ -20,22 +20,36 @@ const IconUsers = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" heigh
 // Helper function to format Turkish phone numbers
 const formatPhone = (phone) => {
     if (!phone) return 'N/A';
-    // Remove all non-digits
-    const digits = phone.replace(/\D/g, '');
 
-    // Turkish phone format: +90 5XX XXX XX XX
-    if (digits.startsWith('90') && digits.length === 12) {
-        // Format: 905XXXXXXXXX -> +90 5XX XXX XX XX
-        return `+90 ${digits.slice(2, 5)} ${digits.slice(5, 8)} ${digits.slice(8, 10)} ${digits.slice(10, 12)}`;
-    } else if (digits.startsWith('0') && digits.length === 11) {
-        // Format: 05XXXXXXXXX -> +90 5XX XXX XX XX
-        return `+90 ${digits.slice(1, 4)} ${digits.slice(4, 7)} ${digits.slice(7, 9)} ${digits.slice(9, 11)}`;
-    } else if (digits.startsWith('5') && digits.length === 10) {
-        // Format: 5XXXXXXXXX -> +90 5XX XXX XX XX
+    // Remove all non-digits
+    let digits = phone.replace(/\D/g, '');
+
+    // Remove leading country codes if present (90, 0090, etc)
+    if (digits.startsWith('0090')) {
+        digits = digits.slice(4);
+    } else if (digits.startsWith('90')) {
+        digits = digits.slice(2);
+    } else if (digits.startsWith('0')) {
+        digits = digits.slice(1);
+    }
+
+    // Turkish mobile numbers are 10 digits starting with 5
+    // If number is longer than 10 digits, take the last 10
+    if (digits.length > 10) {
+        digits = digits.slice(-10);
+    }
+
+    // If it's a valid 10-digit number starting with 5
+    if (digits.length === 10 && digits.startsWith('5')) {
         return `+90 ${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 8)} ${digits.slice(8, 10)}`;
     }
 
-    // Return as-is if format unknown
+    // If still not valid, just return cleaned digits with +90
+    if (digits.length === 10) {
+        return `+90 ${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 8)} ${digits.slice(8, 10)}`;
+    }
+
+    // Return original if can't format
     return phone;
 };
 
