@@ -442,6 +442,7 @@ const AppointmentsManager = () => {
     const [manualForm, setManualForm] = useState({ customerName: '', phone: '', date: '', hour: '', notes: '', barberId: '' });
     const [barbers, setBarbers] = useState([]);
     const [selectedBarber, setSelectedBarber] = useState('');
+    const [selectedDate, setSelectedDate] = useState(''); // New State for Date Filter
     const [availableSlots, setAvailableSlots] = useState([]);
     const [loadingSlots, setLoadingSlots] = useState(false);
 
@@ -465,12 +466,15 @@ const AppointmentsManager = () => {
             if (selectedBarber) {
                 url += `${url.includes('?') ? '&' : '?'}barberId=${selectedBarber}`;
             }
+            if (selectedDate) {
+                url += `${url.includes('?') ? '&' : '?'}date=${selectedDate}`;
+            }
             const res = await API.get(url);
             setAppointments(res.data);
         } catch (error) { toast.error('Yüklenemedi: ' + (error.response?.data?.error || error.message)); }
     };
 
-    useEffect(() => { fetchAppointments(); }, [subTab, selectedBarber]);
+    useEffect(() => { fetchAppointments(); }, [subTab, selectedBarber, selectedDate]);
 
     // Auto-select barber if filtering by one
     useEffect(() => {
@@ -621,6 +625,15 @@ const AppointmentsManager = () => {
                 </div>
 
                 <div className="flex gap-2">
+                    {/* Date Filter */}
+                    <input
+                        type="date"
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        className="bg-dark-950/50 text-white text-sm border border-white/10 rounded-lg px-3 py-2 outline-none focus:border-gold-500"
+                        placeholder="Tarih Seç"
+                    />
+
                     {/* Barber Filter */}
                     <select
                         value={selectedBarber}
