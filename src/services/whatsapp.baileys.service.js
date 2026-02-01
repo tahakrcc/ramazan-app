@@ -33,7 +33,7 @@ const CONFIG = {
         address: 'Movenpick Hotel -1 Kat - Malatya',
         mapsLink: 'https://www.google.com/maps?q=38.351147,38.285103'
     },
-    website: 'https://ramazan-app.onrender.com',
+    website: 'https://byramazan.com/',
     phone: '905306978233'
 };
 
