@@ -51,7 +51,11 @@ const appointmentSchema = new mongoose.Schema({
     trim: true,
     default: ''
   },
-  reminderSent: {
+  reminderSent60: {
+    type: Boolean,
+    default: false
+  },
+  reminderSent30: {
     type: Boolean,
     default: false
   },

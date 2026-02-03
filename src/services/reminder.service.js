@@ -1,57 +1,48 @@
 const cron = require('node-cron');
-const { addHours, format } = require('date-fns');
+const { addMinutes, format, differenceInMinutes, parseISO } = require('date-fns');
 const Appointment = require('../models/appointment.model');
 const whatsappService = require('./whatsapp.service');
 const logger = require('../config/logger');
 
-// Schedule: At minute 0 past every hour
+// Schedule: Run every minute
 const startReminderJob = () => {
-    logger.info('Reminder service started (Every hour)');
+    logger.info('Reminder service started (Every minute)');
 
-    cron.schedule('0 * * * *', async () => {
-        logger.info('Running hourly reminder job...');
+    cron.schedule('* * * * *', async () => {
         try {
             const now = new Date();
-            const targetTime = addHours(now, 1);
+            const todayStr = format(now, 'yyyy-MM-dd');
 
-            const targetDateStr = format(targetTime, 'yyyy-MM-dd');
-            // Format hour as "HH:00"
-            const targetHourStr = format(targetTime, 'HH:00');
-
-            logger.info(`Checking appointments for ${targetDateStr} ${targetHourStr}`);
-
+            // Get all pending confirmed appointments for today
             const appointments = await Appointment.find({
-                date: targetDateStr,
-                hour: targetHourStr,
-                status: 'pending' // Only remind pending appointments
+                date: todayStr,
+                status: 'confirmed',
+                $or: [
+                    { reminderSent60: { $ne: true } },
+                    { reminderSent30: { $ne: true } }
+                ]
             });
 
-            if (appointments.length === 0) {
-                logger.info('No appointments found for reminder.');
-                return;
-            }
-
-            logger.info(`Found ${appointments.length} appointments to remind.`);
+            if (appointments.length === 0) return;
 
             for (const appt of appointments) {
-                try {
-                    const phone = appt.phone;
-                    const chatId = `${phone.replace('+', '')}@c.us`;
-                    const customerName = appt.customerName || 'Değerli Müşterimiz';
+                // Parse appointment time
+                // appt.date is YYYY-MM-DD, appt.hour is HH:00
+                const apptDateTime = new Date(`${appt.date}T${appt.hour}`);
+                const diffMinutes = differenceInMinutes(apptDateTime, now);
 
-                    const message = `Sayın ${customerName},\n\n🔔 *HATIRLATMA*\n\nBugün saat ${targetHourStr} randevunuz bulunmaktadır. Sizi bekliyoruz.\n\n📍 Adres: ${whatsappService.CONFIG ? whatsappService.CONFIG.location.address : 'Movenpick Hotel -1. Kat'}`;
+                // 1. One Hour Reminder (Trigger between 55-65 mins)
+                if (!appt.reminderSent60 && diffMinutes <= 60 && diffMinutes > 45) {
+                    await sendReminder(appt, '60dk');
+                    appt.reminderSent60 = true;
+                    await appt.save();
+                }
 
-                    // Note: accessing whatsappService.CONFIG might be problematic since we removed export.
-                    // We should fetch dynamic config or hardcode/fallback logic here too.
-                    // Ideally reminder service should also fetch config.
-
-                    // Better message without relying on exported CONFIG if it's not available:
-                    // Or we can import Settings here.
-
-                    await whatsappService.sendMessage(chatId, message);
-                    logger.info(`Reminder sent to ${phone}`);
-                } catch (err) {
-                    logger.error(`Failed to send reminder to ${appt.phone}`, err);
+                // 2. 30 Minute Reminder (Trigger between 25-35 mins)
+                else if (!appt.reminderSent30 && diffMinutes <= 30 && diffMinutes > 20) {
+                    await sendReminder(appt, '30dk');
+                    appt.reminderSent30 = true;
+                    await appt.save();
                 }
             }
 
@@ -59,6 +50,21 @@ const startReminderJob = () => {
             logger.error('Reminder job error', error);
         }
     });
+};
+
+const sendReminder = async (appt, type) => {
+    try {
+        const customerName = appt.customerName || 'Değerli Müşterimiz';
+        const barberName = appt.barberName ? `\n✂️ Berber: ${appt.barberName}` : '';
+        const timeMsg = type === '60dk' ? '1 saat' : '30 dakika';
+
+        const message = `Sayın ${customerName},\n\n🔔 *HATIRLATMA*\n\nRandevunuza yaklaşık *${timeMsg}* kaldı.\n📅 Tarih: ${appt.date}\n⏰ Saat: ${appt.hour}${barberName}\n\nSizi bekliyoruz!`;
+
+        await whatsappService.sendMessage(appt.phone, message);
+        logger.info(`Reminder (${type}) sent to ${appt.phone}`);
+    } catch (err) {
+        logger.error(`Failed to send reminder to ${appt.phone}`, err);
+    }
 };
 
 module.exports = { startReminderJob };
