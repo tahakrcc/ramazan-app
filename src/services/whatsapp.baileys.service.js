@@ -335,8 +335,8 @@ const processBotLogic = async (remoteJid, text, msg) => {
     const globalKeywords = ['merhaba', 'selam', 'hi', 'başla', 'menu', 'menü', 'randevu', 'randevum', 'konum', 'bilgi', 'şikayet', 'sikayet', 'öneri'];
 
     // Check if user is trying to run a global command while in an active session
-    // FIXED: Use strict match or startsWith to avoid false positives (e.g., "Selami" -> "Selam")
-    if (session.step !== 'IDLE' && globalKeywords.some(w => lowerText === w || lowerText.startsWith(w + ' '))) {
+    // FIXED: Skip check if we are waiting for a name (allow any name input)
+    if (session.step !== 'IDLE' && session.step !== 'AWAITING_NAME' && globalKeywords.some(w => lowerText === w || lowerText.startsWith(w + ' '))) {
         // Allow cancellation or back
         if (lowerText === 'iptal' || lowerText === 'vazgeç' || lowerText === 'geri' || lowerText === 'önceki') {
             // Pass through to specific handlers below
