@@ -320,9 +320,20 @@ const processBotLogic = async (remoteJid, text, msg) => {
             const session = getSession(remoteJid);
             if (session.step === 'AWAITING_PHONE_INPUT') {
                 // Determine if input is a valid phone number
-                const cleanInput = lowerText.replace(/\D/g, '');
+                let cleanInput = lowerText.replace(/\D/g, '');
 
-                // Validate (10 digits min, 15 max)
+                // NORMALIZE PHONE NUMBER to 90 format
+                // 0532 123 45 67 (11 digits) -> 905321234567
+                // 532 123 45 67 (10 digits) -> 905321234567
+                // 90532 123 45 67 (12 digits) -> 905321234567
+
+                if (cleanInput.length === 11 && cleanInput.startsWith('0')) {
+                    cleanInput = '9' + cleanInput;
+                } else if (cleanInput.length === 10) {
+                    cleanInput = '90' + cleanInput;
+                }
+
+                // Validate (Should be around 12 digits now for TR numbers, but allow slight var)
                 if (cleanInput.length >= 10 && cleanInput.length <= 15) {
                     // SAVE MAPPING (Supports multiple devices/LIDs for same phone)
                     await BotState.findOneAndUpdate(
