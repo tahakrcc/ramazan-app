@@ -286,18 +286,27 @@ const processBotLogic = async (remoteJid, text, msg) => {
     let rawPhone = remoteJid.split('@')[0];
 
     // Check if JID is a LID (Linked Identity)
-    if (remoteJid.includes('@lid')) {
-        if (msg.key.participant && msg.key.participant.includes('@s.whatsapp.net')) {
-            rawPhone = msg.key.participant.split('@')[0];
-        }
+    // User requested: Ask EVERY time for LIDs to be safe ("ilk başta her türlü sorsun")
+    const isLid = remoteJid.includes('@lid');
+
+    // Attempt to recover from participant just for logging/hint, but we might still enforce manual entry if desired.
+    // However, if we HAVE a participant, it is usually the real phone.
+    // BUT the user said "her türlü sorsun" (ask anyway).
+    // Let's rely on BotState. If we don't know them in DB, we ask.
+
+    if (isLid && msg.key.participant && msg.key.participant.includes('@s.whatsapp.net')) {
+        // We COULD auto-recover, but let's check if we want to force verification?
+        // If we trust participant 100%, we don't need to ask.
+        // But let's stick to the user's request: "Ask at the start".
+        // Use participant as a fallback `rawPhone` but still trigger validation check below?
+        rawPhone = msg.key.participant.split('@')[0];
     }
 
     let phone = rawPhone;
 
-    // CHECK FOR LONG/INVALID ID (Likely a LID that wasn't resolved via participant)
-    // Standard phone numbers are usually < 15 digits. LIDs/UUIDs are much longer.
-    // Adjusted threshold: 15 digits LIDs were escaping. Set to >= 13 to be safe (905... is 12).
-    if (phone.length >= 13) {
+    // CHECK FOR LID OR LONG ID
+    // Logic: If it is a LID (any length) OR it looks like a long ID (>12 digits)
+    if (isLid || phone.length >= 13) {
 
         // Check if we already know this user's real phone
         const existingState = await BotState.findOne({ 'data.lid': phone });
