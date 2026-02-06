@@ -283,7 +283,9 @@ const processBotLogic = async (remoteJid, text, msg) => {
     // 2. If it's still a long ID (LID/UUID), check if we have a saved mapping in BotState.
     // 3. If NO mapping, STOP and ask user for real phone.
 
-    let rawPhone = remoteJid.split('@')[0];
+    // FIX: Split by ':' to remove Device AD (Agent Device) ID. 
+    // Example: 123456789:1@s.whatsapp.net -> 123456789
+    let rawPhone = remoteJid.split('@')[0].split(':')[0];
 
     // Check if JID is a LID (Linked Identity)
     const isLid = remoteJid.includes('@lid');
