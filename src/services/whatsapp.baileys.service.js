@@ -286,21 +286,13 @@ const processBotLogic = async (remoteJid, text, msg) => {
     let rawPhone = remoteJid.split('@')[0];
 
     // Check if JID is a LID (Linked Identity)
-    // User requested: Ask EVERY time for LIDs to be safe ("ilk başta her türlü sorsun")
     const isLid = remoteJid.includes('@lid');
 
-    // Attempt to recover from participant just for logging/hint, but we might still enforce manual entry if desired.
-    // However, if we HAVE a participant, it is usually the real phone.
-    // BUT the user said "her türlü sorsun" (ask anyway).
-    // Let's rely on BotState. If we don't know them in DB, we ask.
+    // STRICT LID HANDLING:
+    // We strictly use the LID from the JID as the key for database lookup.
+    // We do NOT attempt to extract phone from 'participant' anymore because it is unreliable 
+    // and causes "key mismatch" (sometimes looking up LID, sometimes Phone) in the 'data.lids' array.
 
-    if (isLid && msg.key.participant && msg.key.participant.includes('@s.whatsapp.net')) {
-        // We COULD auto-recover, but let's check if we want to force verification?
-        // If we trust participant 100%, we don't need to ask.
-        // But let's stick to the user's request: "Ask at the start".
-        // Use participant as a fallback `rawPhone` but still trigger validation check below?
-        rawPhone = msg.key.participant.split('@')[0];
-    }
 
     let phone = rawPhone;
 
