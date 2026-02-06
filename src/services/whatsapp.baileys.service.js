@@ -309,7 +309,13 @@ const processBotLogic = async (remoteJid, text, msg) => {
     if (isLid || phone.length >= 13) {
 
         // Check if we already know this user's real phone
-        const existingState = await BotState.findOne({ 'data.lid': phone });
+        // Search in both single 'lid' field (legacy) and 'lids' array (new multi-device support)
+        const existingState = await BotState.findOne({
+            $or: [
+                { 'data.lid': phone },
+                { 'data.lids': phone }
+            ]
+        });
 
         if (existingState && existingState.phone && existingState.phone.length < 13) {
             // Found a mapping! Use the real phone.
@@ -326,13 +332,15 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
                 // Validate (10 digits min, 15 max)
                 if (cleanInput.length >= 10 && cleanInput.length <= 15) {
-                    // SAVE MAPPING
+                    // SAVE MAPPING (Supports multiple devices/LIDs for same phone)
                     await BotState.findOneAndUpdate(
-                        { phone: cleanInput }, // Use real phone as primary key if exists, or create new
+                        { phone: cleanInput }, // Unique key is the REAL phone
                         {
-                            phone: cleanInput,
-                            'data.lid': rawPhone, // Store the LID in data for reverse lookup
-                            updatedAt: new Date()
+                            $set: {
+                                phone: cleanInput,
+                                updatedAt: new Date()
+                            },
+                            $addToSet: { 'data.lids': rawPhone } // Add checking LID to valid list
                         },
                         { upsert: true, new: true }
                     );
