@@ -296,12 +296,13 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
     // CHECK FOR LONG/INVALID ID (Likely a LID that wasn't resolved via participant)
     // Standard phone numbers are usually < 15 digits. LIDs/UUIDs are much longer.
-    if (phone.length > 15) {
+    // Adjusted threshold: 15 digits LIDs were escaping. Set to >= 13 to be safe (905... is 12).
+    if (phone.length >= 13) {
 
         // Check if we already know this user's real phone
         const existingState = await BotState.findOne({ 'data.lid': phone });
 
-        if (existingState && existingState.phone && existingState.phone.length <= 15) {
+        if (existingState && existingState.phone && existingState.phone.length < 13) {
             // Found a mapping! Use the real phone.
             phone = existingState.phone;
             logger.info(`LID Resolved via DB: ${rawPhone} -> ${phone}`);
@@ -314,7 +315,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 // Determine if input is a valid phone number
                 const cleanInput = lowerText.replace(/\D/g, '');
 
-                // Validate (10-11 digits for TR roughly, or just check min length)
+                // Validate (10 digits min, 15 max)
                 if (cleanInput.length >= 10 && cleanInput.length <= 15) {
                     // SAVE MAPPING
                     await BotState.findOneAndUpdate(
