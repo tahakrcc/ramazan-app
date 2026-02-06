@@ -826,6 +826,31 @@ const processBotLogic = async (remoteJid, text, msg) => {
         return;
     }
 
+    // Step: Cancel Selection (Multiple Appointments)
+    if (session.step === 'AWAITING_CANCEL_SELECTION') {
+        const selectionIndex = parseInt(lowerText) - 1;
+        const choices = session.tempAppointments || [];
+
+        if (!isNaN(selectionIndex) && selectionIndex >= 0 && selectionIndex < choices.length) {
+            const selectedAppt = choices[selectionIndex];
+            const barberDisplay = selectedAppt.barberName === 'Admin' ? 'Ramazan' : selectedAppt.barberName;
+
+            setSession(remoteJid, {
+                step: 'AWAITING_CANCEL_CONFIRM',
+                cancelAppointmentId: selectedAppt._id
+            });
+
+            await sock.sendMessage(remoteJid, {
+                text: `❓ *Randevu İptal Onayı*\n\n📅 ${selectedAppt.date} ⏰ ${selectedAppt.hour}\n✂️ ${barberDisplay}\n\nBu randevuyu iptal etmek istediğinize emin misiniz?\n\n✅ *EVET* yazın onaylamak için\n❌ *HAYIR* yazın vazgeçmek için`
+            });
+        } else {
+            await sock.sendMessage(remoteJid, {
+                text: `⚠️ Geçersiz seçim. Lütfen listedeki numaralardan birini yazın (Örn: 1).\nVazgeçmek için "iptal" yazın.`
+            });
+        }
+        return;
+    }
+
     // Step: Cancel Confirmation
     if (session.step === 'AWAITING_CANCEL_CONFIRM') {
         if (lowerText === 'evet' || lowerText === 'onay') {
@@ -842,8 +867,8 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 await sock.sendMessage(remoteJid, { text: '⚠️ İptal işlemi sırasında bir hata oluştu.' });
             }
             clearSession(remoteJid);
-        } else if (lowerText === 'hayır' || lowerText === 'vazgeç') {
-            await sock.sendMessage(remoteJid, { text: '👍 İptal işlemi vazgeçildi. Randevunuz geçerlidir.' });
+        } else if (lowerText === 'hayır' || lowerText === 'vazgeç' || lowerText === 'iptal') {
+            await sock.sendMessage(remoteJid, { text: '👍 İptal işlemi vazgeçildi. Randevunuz korundu.' });
             clearSession(remoteJid);
         } else {
             await sock.sendMessage(remoteJid, { text: '⚠️ Lütfen *EVET* veya *HAYIR* yazın.' });
@@ -903,31 +928,55 @@ const processBotLogic = async (remoteJid, text, msg) => {
         const today = format(new Date(), 'yyyy-MM-dd');
 
         try {
-            // Find the next upcoming appointment
-            const appointment = await Appointment.findOne({
+            // Find ALL future appointments for this phone
+            const appointments = await Appointment.find({
                 phone: phone,
                 status: 'confirmed',
                 date: { $gte: today }
             }).sort({ date: 1, hour: 1 });
 
-            if (!appointment) {
+            if (appointments.length === 0) {
                 await sock.sendMessage(remoteJid, {
                     text: `📋 İptal edilecek aktif randevunuz bulunmamaktadır.`
                 });
                 return;
             }
 
-            const barberDisplay = appointment.barberName === 'Admin' ? 'Ramazan' : appointment.barberName;
+            // If only one appointment, proceed with single flow
+            if (appointments.length === 1) {
+                const appointment = appointments[0];
+                const barberDisplay = appointment.barberName === 'Admin' ? 'Ramazan' : appointment.barberName;
 
-            // Set session for confirmation
-            setSession(remoteJid, {
-                step: 'AWAITING_CANCEL_CONFIRM',
-                cancelAppointmentId: appointment._id.toString()
-            });
+                setSession(remoteJid, {
+                    step: 'AWAITING_CANCEL_CONFIRM',
+                    cancelAppointmentId: appointment._id.toString()
+                });
 
-            await sock.sendMessage(remoteJid, {
-                text: `❓ *Randevu İptal Onayı*\n\n📅 ${appointment.date} ⏰ ${appointment.hour}\n✂️ ${barberDisplay}\n👤 ${appointment.customerName}\n\nBu randevuyu iptal etmek istediğinize emin misiniz?\n\n✅ *EVET* yazın onaylamak için\n❌ *HAYIR* yazın vazgeçmek için`
-            });
+                await sock.sendMessage(remoteJid, {
+                    text: `❓ *Randevu İptal Onayı*\n\n📅 ${appointment.date} ⏰ ${appointment.hour}\n✂️ ${barberDisplay}\n👤 ${appointment.customerName}\n\nBu randevuyu iptal etmek istediğinize emin misiniz?\n\n✅ *EVET* yazın onaylamak için\n❌ *HAYIR* yazın vazgeçmek için`
+                });
+            } else {
+                // Multiple appointments - Ask for selection
+                setSession(remoteJid, {
+                    step: 'AWAITING_CANCEL_SELECTION',
+                    tempAppointments: appointments.map(a => ({
+                        _id: a._id.toString(),
+                        date: a.date,
+                        hour: a.hour,
+                        barberName: a.barberName
+                    }))
+                });
+
+                let msg = `❓ *Hangi randevuyu iptal etmek istersiniz?*\n\n`;
+                appointments.forEach((apt, i) => {
+                    const barberDisplay = apt.barberName === 'Admin' ? 'Ramazan' : apt.barberName;
+                    msg += `${i + 1}️⃣ ${apt.date} - ${apt.hour} (${barberDisplay})\n`;
+                });
+                msg += `\n👆 Lütfen numara yazın (Örn: 1)\n❌ İptal için "vazgeç" yazın.`;
+
+                await sock.sendMessage(remoteJid, { text: msg });
+            }
+
         } catch (err) {
             logger.error('Cancel appointment error:', err);
             await sock.sendMessage(remoteJid, { text: '⚠️ Randevu iptal edilirken bir hata oluştu.' });
@@ -1049,13 +1098,32 @@ const logout = async () => {
 
 // Public sendMessage function for external use (reminders, notifications, etc.)
 const sendMessage = async (phone, message) => {
-    if (!sock) throw new Error('WhatsApp not connected');
+    if (!sock) {
+        logger.warn('Cannot send message: Socket not initialized');
+        return false;
+    }
 
-    // Ensure phone format
-    const jid = phone.includes('@') ? phone : `${phone.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
+    try {
+        // Ensure proper JID format
+        let jid = phone;
+        if (!jid.includes('@')) {
+            jid = `${phone.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
+        }
 
-    await sock.sendMessage(jid, { text: message });
-    logger.info(`Message sent to ${jid}`);
+        await sock.sendMessage(jid, { text: message });
+        return true;
+    } catch (error) {
+        logger.error(`Send Message Error (to ${phone}):`, error);
+        return false;
+    }
 };
 
-module.exports = { initialize, getStatus, logout, requestPairing, sendMessage };
+module.exports = {
+    initialize,
+    requestPairing,
+    getStatus,
+    logout,
+    sendMessage,
+    // Test helper
+    getSock: () => sock
+};
