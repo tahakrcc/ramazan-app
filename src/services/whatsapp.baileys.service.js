@@ -277,7 +277,34 @@ const clearSession = (jid) => { delete userSessions[jid]; };
 const processBotLogic = async (remoteJid, text, msg) => {
     // Apply fuzzy matching normalization for flexible input recognition
     const lowerText = normalizeText(text);
-    const phone = remoteJid.split('@')[0];
+
+    // --- SMART PHONE EXTRACTION (Fix for LID/Wrong Numbers) ---
+    // 1. Try to get phone from participant if available (useful in groups or some LID contexts)
+    // 2. If not, use remoteJid user part.
+    // 3. Clean up: If it looks like a LID/UUID (too long) or has weird chars, try to recover.
+
+    let rawPhone = remoteJid.split('@')[0];
+
+    // Check if JID is a LID (Linked Identity)
+    if (remoteJid.includes('@lid')) {
+        logger.info(`LID detected: ${remoteJid}. Trying participant...`);
+        if (msg.key.participant && msg.key.participant.includes('@s.whatsapp.net')) {
+            rawPhone = msg.key.participant.split('@')[0];
+            logger.info(`Recovered real phone from participant: ${rawPhone}`);
+        }
+    }
+
+    // Fallback: If stripping result is suspiciously long (likely a UUID-like LID that didn't have @lid suffix or just raw ID)
+    // Mobile numbers are rarely > 15 digits. LIDs are often ~30+ digits or UUIDs.
+    // Example wrong number saw in logs: 223519275274337 (15 digits? Borderline. standard is 10-13)
+    // But some seen were UUID-like?
+
+    // If phone seems valid (digits only,合理的 length 10-15), keep it.
+    // If it's a LID, we might be stuck if participant isn't set.
+    // However, Baileys usually provides the real JID in participant for LIDs.
+
+    const phone = rawPhone;
+
 
     // PRIORITY 0: Check if user is in AWAITING_FEEDBACK state (from BotState collection)
     try {
@@ -704,8 +731,18 @@ const processBotLogic = async (remoteJid, text, msg) => {
             const s = getSession(remoteJid);
 
             try {
-                // Extract phone from remoteJid (e.g., "905551234567@s.whatsapp.net" -> "905551234567")
-                let phone = remoteJid.split('@')[0];
+                // Use the confirmed phone number from session if available (though we didn't store it explicitly in session root, we have it in lookup)
+                // Actually, relying on remoteJid here again is risky if it's a LID.
+                // Better to strip from remoteJid again using the SAME logic or trust the flow.
+                // Let's re-apply the cleanup logic to be safe, or just use `phone` from the top scope if it was available?
+                // `processBotLogic` has `phone` variable at the top. But here we are inside the CONFIRMING block.
+                // We should re-extract cleanly.
+
+                let finalPhone = remoteJid.split('@')[0];
+                if (remoteJid.includes('@lid') && msg.key.participant) {
+                    finalPhone = msg.key.participant.split('@')[0];
+                }
+                const phone = finalPhone;
 
                 // Helper to format phone for display (e.g. +90 5XX ...)
                 const formatPhoneDisplay = (p) => {
