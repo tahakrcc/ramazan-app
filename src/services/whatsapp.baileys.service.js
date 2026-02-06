@@ -788,11 +788,9 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 // `processBotLogic` has `phone` variable at the top. But here we are inside the CONFIRMING block.
                 // We should re-extract cleanly.
 
-                let finalPhone = remoteJid.split('@')[0];
-                if (remoteJid.includes('@lid') && msg.key.participant) {
-                    finalPhone = msg.key.participant.split('@')[0];
-                }
-                const phone = finalPhone;
+                // Use the resolved phone from the top of the function (which handles LID/BotState mapping)
+                // Do NOT re-extract from remoteJid here, as it loses the mapping.
+                // const phone is already available in scope.
 
                 // Helper to format phone for display (e.g. +90 5XX ...)
                 const formatPhoneDisplay = (p) => {
@@ -941,7 +939,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
     // --- MY APPOINTMENT QUERY ---
     if (lowerText === 'randevum' || lowerText.includes('randevum ne zaman') || lowerText.includes('randevularım')) {
-        const phone = remoteJid.split('@')[0];
+        // Use resolved 'phone' variable from top scope
         const today = format(new Date(), 'yyyy-MM-dd');
 
         try {
@@ -974,8 +972,8 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
     // --- CANCEL MY APPOINTMENT ---
     if (lowerText.includes('randevumu iptal') || lowerText.includes('randevu iptal') || lowerText === 'iptalim') {
-        const phone = remoteJid.split('@')[0];
         const today = format(new Date(), 'yyyy-MM-dd');
+        // Use the resolved 'phone' variable from the top scope
 
         try {
             // Find ALL future appointments for this phone
