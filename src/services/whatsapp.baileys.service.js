@@ -628,19 +628,26 @@ const processBotLogic = async (remoteJid, text, msg) => {
             selectedDate = todayStr;
         } else if (lowerText.includes('yarın')) {
             selectedDate = format(addDays(today, 1), 'yyyy-MM-dd');
-        } else if (/^\d{4}-\d{2}-\d{2}$/.test(text.trim())) {
-            const inputDate = text.trim();
+            // Regex: Allow YYYY-M-D or YYYY-MM-DD (relax digits)
+        } else if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(text.trim())) {
+            let inputDate = text.trim();
+
+            // Normalize to YYYY-MM-DD
+            const [y, m, d] = inputDate.split('-').map(Number);
+            const yearStr = y.toString();
+            const monthStr = m.toString().padStart(2, '0');
+            const dayStr = d.toString().padStart(2, '0');
+            inputDate = `${yearStr}-${monthStr}-${dayStr}`;
 
             // FIRST: Validate that it's a real date (not 2026-01-80)
-            const [year, month, day] = inputDate.split('-').map(Number);
-            const dateObj = new Date(year, month - 1, day);
-            const isValidDate = dateObj.getFullYear() === year &&
-                dateObj.getMonth() === month - 1 &&
-                dateObj.getDate() === day;
+            const dateObj = new Date(y, m - 1, d);
+            const isValidDate = dateObj.getFullYear() === y &&
+                dateObj.getMonth() === m - 1 &&
+                dateObj.getDate() === d;
 
             if (!isValidDate) {
                 await sock.sendMessage(remoteJid, {
-                    text: `⚠️ *${inputDate}* geçerli bir tarih değil.\n\nLütfen geçerli bir tarih giriniz.\n\n⬅️ Geri için "geri" yazın.`
+                    text: `⚠️ *${text.trim()}* geçerli bir tarih değil.\n\nLütfen geçerli bir tarih giriniz.\n\n⬅️ Geri için "geri" yazın.`
                 });
                 return;
             }
