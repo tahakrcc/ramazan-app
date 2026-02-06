@@ -279,31 +279,71 @@ const processBotLogic = async (remoteJid, text, msg) => {
     const lowerText = normalizeText(text);
 
     // --- SMART PHONE EXTRACTION (Fix for LID/Wrong Numbers) ---
-    // 1. Try to get phone from participant if available (useful in groups or some LID contexts)
-    // 2. If not, use remoteJid user part.
-    // 3. Clean up: If it looks like a LID/UUID (too long) or has weird chars, try to recover.
+    // 1. Try to get phone from participant if available
+    // 2. If it's still a long ID (LID/UUID), check if we have a saved mapping in BotState.
+    // 3. If NO mapping, STOP and ask user for real phone.
 
     let rawPhone = remoteJid.split('@')[0];
 
     // Check if JID is a LID (Linked Identity)
     if (remoteJid.includes('@lid')) {
-        logger.info(`LID detected: ${remoteJid}. Trying participant...`);
         if (msg.key.participant && msg.key.participant.includes('@s.whatsapp.net')) {
             rawPhone = msg.key.participant.split('@')[0];
-            logger.info(`Recovered real phone from participant: ${rawPhone}`);
         }
     }
 
-    // Fallback: If stripping result is suspiciously long (likely a UUID-like LID that didn't have @lid suffix or just raw ID)
-    // Mobile numbers are rarely > 15 digits. LIDs are often ~30+ digits or UUIDs.
-    // Example wrong number saw in logs: 223519275274337 (15 digits? Borderline. standard is 10-13)
-    // But some seen were UUID-like?
+    let phone = rawPhone;
 
-    // If phone seems valid (digits only,合理的 length 10-15), keep it.
-    // If it's a LID, we might be stuck if participant isn't set.
-    // However, Baileys usually provides the real JID in participant for LIDs.
+    // CHECK FOR LONG/INVALID ID (Likely a LID that wasn't resolved via participant)
+    // Standard phone numbers are usually < 15 digits. LIDs/UUIDs are much longer.
+    if (phone.length > 15) {
 
-    const phone = rawPhone;
+        // Check if we already know this user's real phone
+        const existingState = await BotState.findOne({ 'data.lid': phone });
+
+        if (existingState && existingState.phone && existingState.phone.length <= 15) {
+            // Found a mapping! Use the real phone.
+            phone = existingState.phone;
+            logger.info(`LID Resolved via DB: ${rawPhone} -> ${phone}`);
+        } else {
+            // UNKNOWN LID - We need to ask the user.
+
+            // First, check if they are ALREADY answering the phone query
+            const session = getSession(remoteJid);
+            if (session.step === 'AWAITING_PHONE_INPUT') {
+                // Determine if input is a valid phone number
+                const cleanInput = lowerText.replace(/\D/g, '');
+
+                // Validate (10-11 digits for TR roughly, or just check min length)
+                if (cleanInput.length >= 10 && cleanInput.length <= 15) {
+                    // SAVE MAPPING
+                    await BotState.findOneAndUpdate(
+                        { phone: cleanInput }, // Use real phone as primary key if exists, or create new
+                        {
+                            phone: cleanInput,
+                            'data.lid': rawPhone, // Store the LID in data for reverse lookup
+                            updatedAt: new Date()
+                        },
+                        { upsert: true, new: true }
+                    );
+
+                    await sock.sendMessage(remoteJid, { text: `✅ Numaranız kaydedildi: ${cleanInput}\n\nŞimdi işleminize devam edebilirsiniz. "Randevu" yazarak başlayabilirsiniz.` });
+                    clearSession(remoteJid);
+                    return; // Stop here, let them restart cleanly next msg
+                } else {
+                    await sock.sendMessage(remoteJid, { text: `⚠️ Lütfen geçerli bir telefon numarası giriniz (Örn: 05551234567).` });
+                    return;
+                }
+            }
+
+            // If not answering yet, prompt them
+            setSession(remoteJid, { step: 'AWAITING_PHONE_INPUT' });
+            await sock.sendMessage(remoteJid, {
+                text: `⚠️ Numaranız sistemde gizli görünüyor.\n\nİşlem yapabilmek için lütfen **telefon numaranızı** yazar mısınız?\n(Örn: 0532 123 45 67)`
+            });
+            return; // STOP FLOW HERE
+        }
+    }
 
 
     // PRIORITY 0: Check if user is in AWAITING_FEEDBACK state (from BotState collection)
