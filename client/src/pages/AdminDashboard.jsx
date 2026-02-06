@@ -17,39 +17,37 @@ const IconX = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="2
 const IconPlus = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>;
 const IconUsers = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>;
 
-// Helper function to format Turkish phone numbers
+// Helper function to format phone numbers (Supports TR and International)
 const formatPhone = (phone) => {
     if (!phone) return 'N/A';
 
     // Remove all non-digits
     let digits = phone.replace(/\D/g, '');
 
-    // Remove leading country codes if present (90, 0090, etc)
-    if (digits.startsWith('0090')) {
-        digits = digits.slice(4);
-    } else if (digits.startsWith('90')) {
-        digits = digits.slice(2);
-    } else if (digits.startsWith('0')) {
-        digits = digits.slice(1);
-    }
-
-    // Turkish mobile numbers are 10 digits starting with 5
-    // If number is longer than 10 digits, take the last 10
-    if (digits.length > 10) {
-        digits = digits.slice(-10);
-    }
-
-    // If it's a valid 10-digit number starting with 5
+    // 1. TR Mobile (10 digits starting with 5 => 5XX XXX XX XX)
     if (digits.length === 10 && digits.startsWith('5')) {
         return `+90 ${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 8)} ${digits.slice(8, 10)}`;
     }
 
-    // If still not valid, just return cleaned digits with +90
-    if (digits.length === 10) {
-        return `+90 ${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 8)} ${digits.slice(8, 10)}`;
+    // 2. TR Mobile with 90 prefix (12 digits starting with 905 => 5XX...)
+    if (digits.length === 12 && digits.startsWith('905')) {
+        const d = digits.slice(2);
+        return `+90 ${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6, 8)} ${d.slice(8, 10)}`;
     }
 
-    // Return original if can't format
+    // 3. TR Mobile with 0 prefix (11 digits starting with 05 => 5XX...)
+    if (digits.length === 11 && digits.startsWith('05')) {
+        const d = digits.slice(1);
+        return `+90 ${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6, 8)} ${d.slice(8, 10)}`;
+    }
+
+    // 4. International or other numbers (Don't truncate, just add +)
+    // If it looks like a full international number (10-15 digits), display as is with +
+    if (digits.length >= 10) {
+        return `+${digits}`;
+    }
+
+    // Fallback
     return phone;
 };
 

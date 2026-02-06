@@ -5,8 +5,8 @@ const Joi = require('joi');
 // Joi Schema for Validation - Updated with service field
 const createSchema = Joi.object({
     customerName: Joi.string().min(2).max(100).required(),
-    phone: Joi.string().pattern(/^[0-9]{10,11}$/).required().messages({
-        'string.pattern.base': 'Geçerli bir telefon numarası giriniz (10-11 rakam)'
+    phone: Joi.string().pattern(/^[0-9]{10,15}$/).required().messages({
+        'string.pattern.base': 'Geçerli bir telefon numarası giriniz (10-15 rakam)'
     }),
     date: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).required().messages({
         'string.pattern.base': 'Tarih formatı: YYYY-MM-DD olmalı'
