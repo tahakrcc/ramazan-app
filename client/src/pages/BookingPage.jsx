@@ -122,12 +122,11 @@ const LoadingScreen = () => (
             className="flex flex-col items-center justify-center gap-6"
         >
             {/* Logo - Full Visibility */}
-            {/* Logo Removed */}{/*
             <div className="relative group">
                 <div className="absolute inset-0 bg-gold-500 blur-3xl opacity-20"></div>
                 <img src="/logo.png" alt="Logo" className="relative w-32 h-32 md:w-40 md:h-40 object-contain drop-shadow-2xl" />
             </div>
-            */}
+
 
             {/* Foreground Text */}
             <span className="relative z-10 text-gold-500 font-serif text-3xl md:text-5xl tracking-[0.3em] font-bold text-center drop-shadow-lg">
@@ -891,7 +890,7 @@ const Nav = () => {
     return (
         <nav className="fixed top-0 left-0 right-0 p-6 md:p-8 flex justify-between items-center z-40 bg-gradient-to-b from-dark-950/80 to-transparent backdrop-blur-sm md:bg-none md:backdrop-blur-none transition-all duration-300">
             <div className="z-50 relative flex items-center gap-4">
-                {/* <img src="/logo.png" alt="Logo" className="w-20 h-20 object-contain drop-shadow-lg" /> */}
+                <img src="/logo.png" alt="Logo" className="w-12 h-12 md:w-16 md:h-16 object-contain drop-shadow-lg" />
                 <span className="font-serif text-xl tracking-widest text-white mix-blend-difference">BY RAMAZAN</span>
             </div>
 
