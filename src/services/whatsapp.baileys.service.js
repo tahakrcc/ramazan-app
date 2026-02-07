@@ -303,11 +303,14 @@ const processBotLogic = async (remoteJid, text, msg) => {
     if (isLid || phone.length >= 13) {
 
         // Check if we already know this user's real phone
-        // Search in both single 'lid' field (legacy) and 'lids' array (new multi-device support)
+        // Search in both single 'lid' field and 'lids' array using REGEX to match "12345" against "12345:1"
+        // This ensures backward compatibility with old records that have device ID suffix.
+        const lidRegex = new RegExp(`^${phone}(:|$)`);
+
         const existingState = await BotState.findOne({
             $or: [
-                { 'data.lid': phone },
-                { 'data.lids': phone }
+                { 'data.lid': { $regex: lidRegex } },
+                { 'data.lids': { $regex: lidRegex } }
             ]
         });
 
