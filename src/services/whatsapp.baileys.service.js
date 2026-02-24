@@ -147,6 +147,7 @@ const initialize = async () => {
             auth: state,
             syncFullHistory: false,
             generateHighQualityLinkPreview: false,
+            logger: require('pino')({ level: 'silent' }),
         });
 
         sock.ev.on('creds.update', saveCreds);
@@ -189,7 +190,7 @@ const initialize = async () => {
                 if (shouldReconnect) {
                     status = 'INITIALIZING';
                     // Reconnect logic
-                    const delay = statusCode === 428 ? 5000 : 2000; // Longer delay for "Precondition Required"
+                    const delay = statusCode === 428 ? 10000 : 10000; // Increased delay to 10 seconds to prevent rapid loop OOM
                     setTimeout(initialize, delay);
                 } else {
                     status = 'DISCONNECTED';
