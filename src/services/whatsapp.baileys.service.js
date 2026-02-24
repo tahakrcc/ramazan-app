@@ -136,22 +136,23 @@ const parseDateInput = (input) => {
 };
 
 // --- Main Initialization ---
-const initialize = async () => {
+const initialize = async (forceFresh = false) => {
     try {
-        logger.info('Initializing WhatsApp Service...');
+        logger.info(`Initializing WhatsApp Service... (forceFresh: ${forceFresh})`);
 
-        // CRITICAL FIX: To prevent old broken session restoring locally and hanging in OOM/405, 
-        // we forcefully clean the auth state if we are intentionally starting.
-        try {
-            const mongoose = require('mongoose');
-            if (mongoose.connection.readyState === 1) {
-                await mongoose.connection.db.collection('authstates').deleteMany({});
-                logger.info('Purged old auth states to force generic QR code');
-                // Added a small delay to ensure DB operations settle before Baileys reads the authstate
-                await new Promise(resolve => setTimeout(resolve, 2000));
+        // We only forcefully clean the auth state if we are explicitly requested to (logout/405 recovery)
+        if (forceFresh) {
+            try {
+                const mongoose = require('mongoose');
+                if (mongoose.connection.readyState === 1) {
+                    await mongoose.connection.db.collection('authstates').deleteMany({});
+                    logger.info('Purged old auth states for a fresh start');
+                    // Added a small delay to ensure DB operations settle before Baileys reads the authstate
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+            } catch (e) {
+                logger.error('Failed to purge auth states before init', e);
             }
-        } catch (e) {
-            logger.error('Failed to purge auth states before init', e);
         }
 
         const { state, saveCreds } = await useMongoDBAuthState();
@@ -198,7 +199,7 @@ const initialize = async () => {
                         await mongoose.connection.db.collection('authstates').deleteMany({});
                         logger.info('Session cleared. Restarting service to generate new code...');
                         // Re-initialize after clearing to prompt for new code immediately
-                        setTimeout(initialize, 1000);
+                        setTimeout(() => initialize(true), 1000);
                         return; // Exit this handler to prevent double init
                     } catch (e) { logger.error('Clear session error', e); }
                     pairingCode = null;
@@ -208,8 +209,15 @@ const initialize = async () => {
                 if (shouldReconnect) {
                     status = 'INITIALIZING';
                     // Reconnect logic
-                    const delay = statusCode === 428 ? 10000 : 10000; // Increased delay to 10 seconds to prevent rapid loop OOM
-                    setTimeout(initialize, delay);
+                    // If 405 error, we should probably clear the session as it might be corrupted
+                    if (statusCode === 405) {
+                        logger.warn('405 Error encountered. Session might be corrupted. Forcing fresh start...');
+                        setTimeout(() => initialize(true), 10000);
+                        return;
+                    }
+
+                    const delay = statusCode === 428 ? 10000 : 10000;
+                    setTimeout(() => initialize(false), delay);
                 } else {
                     status = 'DISCONNECTED';
                 }
@@ -231,7 +239,7 @@ const initialize = async () => {
 
     } catch (error) {
         logger.error('WhatsApp Initialization Error:', error);
-        setTimeout(initialize, 5000); // Retry on fatal error
+        setTimeout(() => initialize(false), 5000); // Retry on fatal error
     }
 };
 
@@ -1178,7 +1186,7 @@ const logout = async () => {
         qrCode = null;
         status = 'DISCONNECTED';
         // Auto restart?
-        setTimeout(initialize, 3000);
+        setTimeout(() => initialize(true), 3000);
         return true;
     } catch (error) {
         logger.error('Logout failed:', error);
