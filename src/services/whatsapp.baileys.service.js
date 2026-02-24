@@ -1,4 +1,4 @@
-const { makeWASocket, DisconnectReason, useMultiFileAuthState, makeCacheableSignalKeyStore } = require('@whiskeysockets/baileys');
+const { makeWASocket, DisconnectReason, useMultiFileAuthState, makeCacheableSignalKeyStore, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const useMongoDBAuthState = require('../utils/mongoAuthState');
 const logger = require('../config/logger');
 const Admin = require('../models/admin.model');
@@ -140,9 +140,27 @@ const initialize = async () => {
     try {
         logger.info('Initializing WhatsApp Service...');
 
+        // CRITICAL FIX: To prevent old broken session restoring locally and hanging in OOM/405, 
+        // we forcefully clean the auth state if we are intentionally starting.
+        try {
+            const mongoose = require('mongoose');
+            if (mongoose.connection.readyState === 1) {
+                await mongoose.connection.db.collection('authstates').deleteMany({});
+                logger.info('Purged old auth states to force generic QR code');
+                // Added a small delay to ensure DB operations settle before Baileys reads the authstate
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+        } catch (e) {
+            logger.error('Failed to purge auth states before init', e);
+        }
+
         const { state, saveCreds } = await useMongoDBAuthState();
 
+        const { version, isLatest } = await fetchLatestBaileysVersion();
+        logger.info(`Using WA v${version.join('.')}, isLatest: ${isLatest}`);
+
         sock = makeWASocket({
+            version,
             printQRInTerminal: false,
             auth: state,
             syncFullHistory: false,
