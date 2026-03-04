@@ -253,6 +253,9 @@ const initialize = async (forceFresh = false) => {
 // Note: I will paste the original handleMessage here but simplified/cleaned if needed.
 // For now, I'll keep the structure but ensure 'randevu' flow logs are present.
 
+// --- Per-user message queue to prevent race conditions ---
+const userMessageQueues = {}; // { remoteJid: Promise }
+
 const handleMessage = async (msg) => {
     try {
         const remoteJid = msg.key.remoteJid;
@@ -260,22 +263,33 @@ const handleMessage = async (msg) => {
 
         if (!text) return;
 
-        // Log incoming message for debugging
-        logger.info(`Message from ${remoteJid}: ${text}`);
+        // Queue messages per user: wait for previous message to finish before processing next
+        const previousTask = userMessageQueues[remoteJid] || Promise.resolve();
+        const currentTask = previousTask.then(async () => {
+            try {
+                logger.info(`Message from ${remoteJid}: ${text}`);
 
-        if (text.toLowerCase() === 'ping') {
-            await sock.sendMessage(remoteJid, { text: 'Pong!' });
-        }
+                if (text.toLowerCase() === 'ping') {
+                    await sock.sendMessage(remoteJid, { text: 'Pong!' });
+                }
 
-        // ... (Rest of logical flow would be here, assuming minimal changes needed for connection fix)
-        // I will omit the full logic here to keep the file overwrite focused on CONNECTION logic.
-        // BUT wait, I need to preserve the booking logic!
-        // I will copy the existing booking logic manually below.
+                await processBotLogic(remoteJid, text, msg);
+            } catch (err) {
+                logger.error('Message Handle Error:', err);
+            }
+        });
 
-        await processBotLogic(remoteJid, text, msg);
+        userMessageQueues[remoteJid] = currentTask;
+
+        // Clean up queue reference after completion to prevent memory leak
+        currentTask.finally(() => {
+            if (userMessageQueues[remoteJid] === currentTask) {
+                delete userMessageQueues[remoteJid];
+            }
+        });
 
     } catch (err) {
-        logger.error('Message Handle Error:', err);
+        logger.error('Message Queue Error:', err);
     }
 };
 
