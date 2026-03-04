@@ -3,27 +3,32 @@ const Appointment = require('../models/appointment.model');
 const whatsappService = require('../services/whatsapp.service');
 const logger = require('../config/logger');
 
+// Helper: Get current time in Turkey (UTC+3)
+const getTurkeyNow = () => {
+    const now = new Date();
+    const turkeyOffset = 3 * 60 * 60 * 1000;
+    return new Date(now.getTime() + turkeyOffset);
+};
+
 // Run every 10 minutes to check for upcoming appointments
 cron.schedule('*/10 * * * *', async () => {
     try {
-        const now = new Date();
-        const todayStr = now.toISOString().split('T')[0];
+        const turkeyNow = getTurkeyNow();
+        const todayStr = turkeyNow.toISOString().split('T')[0];
 
-        // --- 1 HOUR REMINDER (50-70 mins) ---
-        const startWindow60 = new Date(now.getTime() + 50 * 60000);
-        const endWindow60 = new Date(now.getTime() + 70 * 60000);
+        // Time windows using Turkey time
+        // --- 1 HOUR REMINDER (50-70 mins before appointment) ---
+        const startWindow60 = new Date(turkeyNow.getTime() + 50 * 60000);
+        const endWindow60 = new Date(turkeyNow.getTime() + 70 * 60000);
 
-        // --- 30 MINUTE REMINDER (20-40 mins) ---
-        const startWindow30 = new Date(now.getTime() + 20 * 60000);
-        const endWindow30 = new Date(now.getTime() + 40 * 60000);
+        // --- 30 MINUTE REMINDER (20-40 mins before appointment) ---
+        const startWindow30 = new Date(turkeyNow.getTime() + 20 * 60000);
+        const endWindow30 = new Date(turkeyNow.getTime() + 40 * 60000);
 
-        // Find today's confirmed appointments that might need reminding
-        // We fetch broadly and filter in loop to avoid complex OR logic in query if schema fields are mixed
-        // But better to query confirmed ones for today.
+        // Find today's confirmed appointments that need reminding
         const appointments = await Appointment.find({
             status: 'confirmed',
             date: todayStr,
-            // Optimization: Only fetch if at least one reminder is NOT sent
             $or: [
                 { reminderSent60: { $ne: true } },
                 { reminderSent30: { $ne: true } }
@@ -31,7 +36,10 @@ cron.schedule('*/10 * * * *', async () => {
         });
 
         for (const apt of appointments) {
-            const aptDateTime = new Date(`${apt.date}T${apt.hour}`);
+            // Parse appointment time as Turkey time (same timezone as turkeyNow)
+            // We create the Date using the ISO string with the offset applied
+            const aptDateTime = new Date(`${apt.date}T${apt.hour}:00.000Z`);
+            // aptDateTime is now in "fake UTC" — same frame as turkeyNow
 
             // 1. Check 60 Minute Window
             if (apt.reminderSent60 !== true) {
@@ -40,9 +48,8 @@ cron.schedule('*/10 * * * *', async () => {
                     try {
                         await whatsappService.sendMessage(apt.phone, message);
                         apt.reminderSent60 = true;
-                        // Determine if we should also mark 30 as skipped? No, 30 comes later.
                         await apt.save();
-                        logger.info(`60-min Reminder sent to ${apt.phone}`);
+                        logger.info(`60-min Reminder sent to ${apt.phone} (apt: ${apt.date} ${apt.hour})`);
                     } catch (err) {
                         logger.error(`Failed to send 60-min reminder to ${apt.phone}: ${err.message}`);
                     }
@@ -57,7 +64,7 @@ cron.schedule('*/10 * * * *', async () => {
                         await whatsappService.sendMessage(apt.phone, message);
                         apt.reminderSent30 = true;
                         await apt.save();
-                        logger.info(`30-min Reminder sent to ${apt.phone}`);
+                        logger.info(`30-min Reminder sent to ${apt.phone} (apt: ${apt.date} ${apt.hour})`);
                     } catch (err) {
                         logger.error(`Failed to send 30-min reminder to ${apt.phone}: ${err.message}`);
                     }

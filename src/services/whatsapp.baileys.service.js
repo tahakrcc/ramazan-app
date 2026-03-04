@@ -510,10 +510,37 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 text: `⬅️ Berber seçimine döndünüz.\n\n*Aktif Berberlerimiz:*\n${barbers.map((b, i) => `${i + 1}️⃣ ${b.name === 'Admin' ? 'Ramazan' : b.name}`).join('\n')}\n\n👆 Lütfen berberin numarasını veya ismini yazın.`
             });
         } else if (prevStep === 'AWAITING_DATE') {
-            const today = format(new Date(), 'yyyy-MM-dd');
-            const tomorrow = format(addDays(new Date(), 1), 'yyyy-MM-dd');
+            // Rebuild full date list
+            const settings = await getSettings();
+            const maxDays = settings.bookingRangeDays || 14;
+            const closedWeekDays = settings.closedWeekDays || [0];
+            const closedDates = await ClosedDate.find().select('date').lean();
+            const closedDateSet = new Set(closedDates.map(cd => cd.date));
+
+            let dateOptions = [];
+            let optionCounter = 0;
+            for (let i = 0; i < maxDays; i++) {
+                const d = addDays(new Date(), i);
+                const dayOfWeek = d.getDay();
+                if (closedWeekDays.includes(dayOfWeek)) continue;
+                const dateStr = format(d, 'yyyy-MM-dd');
+                if (closedDateSet.has(dateStr)) continue;
+                let dayName;
+                if (i === 0) dayName = 'Bugün';
+                else if (i === 1) dayName = 'Yarın';
+                else {
+                    try {
+                        dayName = trLocale ? format(d, 'dd/MM (EEEE)', { locale: trLocale }) : format(d, 'dd/MM (EEE)');
+                    } catch (e) { dayName = format(d, 'dd/MM'); }
+                }
+                optionCounter++;
+                dateOptions.push({ number: optionCounter, label: `${optionCounter}️⃣ ${dayName} (${dateStr})`, date: dateStr });
+            }
+
+            setSession(remoteJid, { step: prevStep, dateOptions });
+
             await sock.sendMessage(remoteJid, {
-                text: `⬅️ Tarih seçimine döndünüz.\n\n📅 Hangi gün?\n\n1️⃣ Bugün (${today})\n2️⃣ Yarın (${tomorrow})\n\nYazınız: *Bugün*, *Yarın* veya tarih`
+                text: `⬅️ Tarih seçimine döndünüz.\n\n📅 *Lütfen Bir Tarih Seçiniz:*\n\n${dateOptions.map(opt => opt.label).join('\n')}\n\n👆 Numara yazarak seçim yapabilirsiniz.`
             });
         } else if (prevStep === 'AWAITING_HOUR') {
             // Fetch real available slots from DB
@@ -587,10 +614,14 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 const maxDays = settings.bookingRangeDays || 14;
                 const closedWeekDays = settings.closedWeekDays || [0]; // Default: Sunday closed
 
-                // Build date options (skip closed week days like Sunday)
+                // Fetch specific closed dates from DB
+                const closedDates = await ClosedDate.find().select('date').lean();
+                const closedDateSet = new Set(closedDates.map(cd => cd.date));
+
+                // Build date options (skip closed week days AND specific closed dates)
                 let dateOptions = [];
                 let optionCounter = 0;
-                for (let i = 0; i < maxDays && dateOptions.length < 7; i++) {
+                for (let i = 0; i < maxDays; i++) {
                     const d = addDays(new Date(), i);
                     const dayOfWeek = d.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
 
@@ -600,6 +631,12 @@ const processBotLogic = async (remoteJid, text, msg) => {
                     }
 
                     const dateStr = format(d, 'yyyy-MM-dd');
+
+                    // Skip if this specific date is closed
+                    if (closedDateSet.has(dateStr)) {
+                        continue;
+                    }
+
                     // Safely handle locale - if undefined, just show date without day name
                     let dayName;
                     if (i === 0) {
@@ -620,7 +657,6 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 }
 
                 const displayBarberName = matchedBarber.name === 'Admin' ? 'Ramazan' : matchedBarber.name;
-                const maxDateStr = format(addDays(new Date(), maxDays - 1), 'dd/MM/yyyy');
 
                 // Store dateOptions in session for later use
                 setSession(remoteJid, {
@@ -631,7 +667,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 });
 
                 await sock.sendMessage(remoteJid, {
-                    text: `✅ *${displayBarberName}* seçildi.\n\n📅 *Lütfen Bir Tarih Seçiniz:*\n\n${dateOptions.map(opt => opt.label).join('\n')}\n\n👆 Numara veya tarih yazabilirsiniz.\nℹ️ En geç ${maxDateStr} tarihine kadar randevu alabilirsiniz (${maxDays} gün).\n\n⬅️ Geri için "geri" yazın.`
+                    text: `✅ *${displayBarberName}* seçildi.\n\n📅 *Lütfen Bir Tarih Seçiniz:*\n\n${dateOptions.map(opt => opt.label).join('\n')}\n\n👆 Numara yazarak seçim yapabilirsiniz.\n\n⬅️ Geri için "geri" yazın.`
                 });
 
                 logger.info(`Barber selected: ${displayBarberName} (${barberId}) for ${remoteJid}`);
@@ -762,9 +798,17 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 text: `📅 *${selectedDate}* tarihi seçildi.\n\n⏰ *Müsait Saatler:*\n${availableHours.join(', ')}\n\nLütfen bir saat yazın (Örn: 14 veya 14:00)\n\n⬅️ Geri için "geri" yazın.`
             });
         } else {
-            await sock.sendMessage(remoteJid, {
-                text: `⚠️ Geçersiz tarih formatı.\n\nLütfen şu şekilde yazın:\n- *Bugün*\n- *Yarın*\n- veya *YYYY-AA-GG* formatında\n\n⬅️ Geri için "geri" yazın.`
-            });
+            // Show the numbered list again on invalid input
+            const sessionDateOpts = session.dateOptions || [];
+            if (sessionDateOpts.length > 0) {
+                await sock.sendMessage(remoteJid, {
+                    text: `⚠️ Geçersiz seçim.\n\n📅 Lütfen aşağıdaki listeden numara yazarak seçim yapın:\n\n${sessionDateOpts.map(opt => opt.label).join('\n')}\n\n⬅️ Geri için "geri" yazın.`
+                });
+            } else {
+                await sock.sendMessage(remoteJid, {
+                    text: `⚠️ Geçersiz seçim. Lütfen tekrar deneyin veya "geri" yazın.`
+                });
+            }
         }
         return;
     }

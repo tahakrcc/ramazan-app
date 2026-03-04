@@ -4,32 +4,35 @@ const BotState = require('../models/botState.model');
 const whatsappService = require('../services/whatsapp.service');
 const logger = require('../config/logger');
 
+// Helper: Get current time in Turkey (UTC+3)
+const getTurkeyNow = () => {
+    const now = new Date();
+    // Offset to Turkey Time (UTC+3) = add 3 hours in ms
+    const turkeyOffset = 3 * 60 * 60 * 1000;
+    const turkeyTime = new Date(now.getTime() + turkeyOffset);
+    return turkeyTime;
+};
+
 // Run every 30 minutes
 cron.schedule('*/30 * * * *', async () => {
     try {
-        const now = new Date();
-        const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
-        const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+        const turkeyNow = getTurkeyNow();
+        const todayStr = turkeyNow.toISOString().split('T')[0];
+        const currentHour = turkeyNow.getUTCHours(); // Use getUTCHours since we already offset
 
-        // Find appointments that ended approx 2-3 hours ago
-        // And haven't been asked for feedback
-        // Note: We need a flag 'feedbackRequested' in appointment or assume via BotState
-        // For simplicity, let's query appointments of 'today' where hour < currentHour - 2
+        logger.info(`Feedback job running. Turkey time: ${todayStr} ${currentHour}:xx`);
 
-        const todayStr = now.toISOString().split('T')[0];
-
+        // Find today's confirmed appointments that haven't been asked for feedback
         const appointments = await Appointment.find({
             date: todayStr,
             status: 'confirmed',
-            reminderSent: true, // Likely attended
-            feedbackRequested: { $ne: true } // New field needed
+            feedbackRequested: { $ne: true }
         });
 
         for (const apt of appointments) {
             const aptHour = parseInt(apt.hour.split(':')[0]);
-            const currentHour = now.getHours();
 
-            // If 2 hours passed since appointment
+            // If 2 hours passed since appointment (using Turkey local time)
             if (currentHour >= aptHour + 2) {
 
                 const message = `Merhaba ${apt.customerName}, bugün By Ramazan'ı tercih ettiğiniz için teşekkürler! ✂️\n\nHizmetimizden memnun kaldınız mı? Puanınızı ve görüşünüzü bu mesaja cevap olarak yazabilirsiniz.\n\nÖrnek: "5 Saç kesimi harikaydı"`;
@@ -52,7 +55,7 @@ cron.schedule('*/30 * * * *', async () => {
                         { upsert: true, new: true }
                     );
 
-                    logger.info(`Feedback request sent to ${apt.phone}`);
+                    logger.info(`Feedback request sent to ${apt.phone} (apt: ${apt.hour}, current Turkey hour: ${currentHour})`);
                 } catch (err) {
                     logger.error(`Failed to send feedback req to ${apt.phone}: ${err.message}`);
                 }
@@ -63,3 +66,5 @@ cron.schedule('*/30 * * * *', async () => {
         logger.error('Feedback job error:', error);
     }
 });
+
+logger.info('Feedback request job scheduled (runs every 30 mins).');
