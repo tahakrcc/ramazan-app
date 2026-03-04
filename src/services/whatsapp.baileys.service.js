@@ -114,6 +114,12 @@ const normalizeText = (text) => {
     return normalizedWords.join(' ');
 };
 
+// Convert number to emoji digits (e.g. 10 → 1️⃣0️⃣)
+const numToEmoji = (num) => {
+    const emojiDigits = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
+    return String(num).split('').map(d => emojiDigits[parseInt(d)] || d).join('');
+};
+
 // Send notification to admin
 const notifyAdmin = async (message) => {
     try {
@@ -534,7 +540,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
                     } catch (e) { dayName = format(d, 'dd/MM'); }
                 }
                 optionCounter++;
-                dateOptions.push({ number: optionCounter, label: `${optionCounter}️⃣ ${dayName} (${dateStr})`, date: dateStr });
+                dateOptions.push({ number: optionCounter, label: `${numToEmoji(optionCounter)} ${dayName} (${dateStr})`, date: dateStr });
             }
 
             setSession(remoteJid, { step: prevStep, dateOptions });
@@ -653,7 +659,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
                         }
                     }
                     optionCounter++;
-                    dateOptions.push({ number: optionCounter, label: `${optionCounter}️⃣ ${dayName} (${dateStr})`, date: dateStr });
+                    dateOptions.push({ number: optionCounter, label: `${numToEmoji(optionCounter)} ${dayName} (${dateStr})`, date: dateStr });
                 }
 
                 const displayBarberName = matchedBarber.name === 'Admin' ? 'Ramazan' : matchedBarber.name;
