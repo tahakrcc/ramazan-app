@@ -1052,7 +1052,8 @@ const SettingsManager = () => {
         appointmentEndHour: 20,
         bookingRangeDays: 14,
         businessAddress: '',
-        businessMapsLink: ''
+        businessMapsLink: '',
+        closedWeekDays: []
     });
     const [closedDates, setClosedDates] = useState([]);
     const [newClosedDate, setNewClosedDate] = useState({ date: '', reason: '' });
@@ -1073,7 +1074,10 @@ const SettingsManager = () => {
     const fetchSettings = async () => {
         try {
             const res = await API.get('/admin/settings');
-            setSettings(res.data);
+            setSettings({
+                ...res.data,
+                closedWeekDays: res.data.closedWeekDays || []
+            });
         } catch (error) {
             console.error(error);
         }
@@ -1082,6 +1086,16 @@ const SettingsManager = () => {
     const handleChange = (e) => {
         const { name, value } = e.target;
         setSettings(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleToggleSunday = () => {
+        setSettings(prev => {
+            const isClosed = prev.closedWeekDays.includes(0);
+            const newList = isClosed
+                ? prev.closedWeekDays.filter(d => d !== 0)
+                : [...prev.closedWeekDays, 0];
+            return { ...prev, closedWeekDays: newList };
+        });
     };
 
     const handleSave = async (e) => {
@@ -1175,16 +1189,34 @@ const SettingsManager = () => {
                         </div>
                     </div>
 
-                    <div className="space-y-2">
-                        <label className="text-xs uppercase tracking-widest text-gray-400 font-bold">Randevu Açık Gün Sayısı</label>
-                        <input
-                            type="number"
-                            name="bookingRangeDays"
-                            value={settings.bookingRangeDays}
-                            onChange={handleChange}
-                            className="w-full bg-dark-950/50 border border-white/10 text-white rounded-xl p-4 focus:border-gold-500 focus:ring-1 focus:ring-gold-500 transition-all"
-                        />
-                        <p className="text-xs text-gray-500">Müşteriler bugünden itibaren kaç gün sonrasına kadar randevu alabilir.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                            <label className="text-xs uppercase tracking-widest text-gray-400 font-bold">Randevu Açık Gün Sayısı</label>
+                            <input
+                                type="number"
+                                name="bookingRangeDays"
+                                value={settings.bookingRangeDays}
+                                onChange={handleChange}
+                                className="w-full bg-dark-950/50 border border-white/10 text-white rounded-xl p-4 focus:border-gold-500 focus:ring-1 focus:ring-gold-500 transition-all"
+                            />
+                            <p className="text-xs text-gray-500">Müşteriler bugünden itibaren kaç gün sonrasına kadar randevu alabilir.</p>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs uppercase tracking-widest text-gray-400 font-bold">Haftalık İzin Günü (Kapalı)</label>
+                            <div className="bg-dark-950/50 border border-white/10 rounded-xl p-4 flex items-center justify-between h-[58px]">
+                                <span className="text-white">Pazar Günü Kapalı</span>
+                                <button
+                                    type="button"
+                                    onClick={handleToggleSunday}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${settings.closedWeekDays.includes(0) ? 'bg-gold-500' : 'bg-gray-700'}`}
+                                >
+                                    <span
+                                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.closedWeekDays.includes(0) ? 'translate-x-6' : 'translate-x-1'}`}
+                                    />
+                                </button>
+                            </div>
+                            <p className="text-xs text-gray-500">Aktif edilirse Pazar günleri randevuya kapatılır.</p>
+                        </div>
                     </div>
 
                     <div className="space-y-2">

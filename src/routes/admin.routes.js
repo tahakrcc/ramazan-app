@@ -229,7 +229,7 @@ router.get('/settings', protect, async (req, res, next) => {
 router.put('/settings', protect, async (req, res, next) => {
     try {
         const Settings = require('../models/settings.model');
-        const { appointmentStartHour, appointmentEndHour, bookingRangeDays, businessAddress, businessMapsLink } = req.body;
+        const { appointmentStartHour, appointmentEndHour, bookingRangeDays, businessAddress, businessMapsLink, closedWeekDays } = req.body;
 
         let settings = await Settings.findOne();
         if (!settings) settings = await Settings.create({});
@@ -239,6 +239,7 @@ router.put('/settings', protect, async (req, res, next) => {
         if (bookingRangeDays !== undefined) settings.bookingRangeDays = bookingRangeDays;
         if (businessAddress !== undefined) settings.businessAddress = businessAddress;
         if (businessMapsLink !== undefined) settings.businessMapsLink = businessMapsLink;
+        if (closedWeekDays !== undefined) settings.closedWeekDays = closedWeekDays;
 
         await settings.save();
         logger.info('Admin updated settings');

@@ -25,7 +25,7 @@ const BookingPage = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [services, setServices] = useState([]);
     const [feedbacks, setFeedbacks] = useState([]);
-    const [settings, setSettings] = useState({ bookingRangeDays: 14 }); // Dynamic settings
+    const [settings, setSettings] = useState({ bookingRangeDays: 14, closedWeekDays: [] }); // Dynamic settings
 
     // Initial Load Animation & Fetch Services & Feedbacks & Settings
     useEffect(() => {
@@ -642,19 +642,19 @@ const BookingFlow = ({ onBack, services, settings }) => {
                                         const d = format(addDays(new Date(), i), 'yyyy-MM-dd');
                                         const dateObj = addDays(new Date(), i);
                                         const dayOfWeek = dateObj.getDay(); // 0=Sunday
-                                        const isSunday = dayOfWeek === 0;
+                                        const isClosed = settings.closedWeekDays?.includes(dayOfWeek);
                                         const isSelected = selection.date === d;
                                         return (
                                             <button
                                                 key={d}
-                                                onClick={() => !isSunday && setSelection({ ...selection, date: d })}
-                                                disabled={isSunday}
-                                                className={`flex-shrink-0 w-20 h-28 md:w-24 md:h-32 border ${isSunday ? 'border-red-900/30 bg-red-950/20 text-gray-600 cursor-not-allowed opacity-50' : isSelected ? 'border-gold-500 bg-gold-500 text-dark-950 shadow-[0_0_20px_rgba(212,175,55,0.3)]' : 'border-white/10 hover:border-gold-500 text-gray-400 hover:text-white'} transition-all flex flex-col items-center justify-center gap-2 rounded-sm relative`}
+                                                onClick={() => !isClosed && setSelection({ ...selection, date: d })}
+                                                disabled={isClosed}
+                                                className={`flex-shrink-0 w-20 h-28 md:w-24 md:h-32 border ${isClosed ? 'border-red-900/30 bg-red-950/20 text-gray-600 cursor-not-allowed opacity-50' : isSelected ? 'border-gold-500 bg-gold-500 text-dark-950 shadow-[0_0_20px_rgba(212,175,55,0.3)]' : 'border-white/10 hover:border-gold-500 text-gray-400 hover:text-white'} transition-all flex flex-col items-center justify-center gap-2 rounded-sm relative`}
                                             >
-                                                {isSunday && <span className="absolute top-1 right-1 text-xs">🚫</span>}
+                                                {isClosed && <span className="absolute top-1 right-1 text-xs">🚫</span>}
                                                 <span className="text-[10px] md:text-xs uppercase tracking-widest opacity-80">{format(dateObj, 'EEE', { locale: tr })}</span>
                                                 <span className="text-2xl md:text-3xl font-serif font-bold">{format(dateObj, 'dd')}</span>
-                                                {isSunday && <span className="text-[8px] opacity-60">Kapalı</span>}
+                                                {isClosed && <span className="text-[8px] opacity-60">Kapalı</span>}
                                             </button>
                                         )
                                     })}

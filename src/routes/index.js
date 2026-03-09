@@ -22,7 +22,8 @@ router.get('/settings/public', async (req, res, next) => {
             appointmentStartHour: settings.appointmentStartHour || 10,
             appointmentEndHour: settings.appointmentEndHour || 20,
             businessAddress: settings.businessAddress || '',
-            businessMapsLink: settings.businessMapsLink || ''
+            businessMapsLink: settings.businessMapsLink || '',
+            closedWeekDays: settings.closedWeekDays || []
         });
     } catch (error) {
         next(error);
