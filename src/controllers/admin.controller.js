@@ -47,14 +47,14 @@ const getAppointments = async (req, res, next) => {
         const { date, startDate, endDate, view, barberId } = req.query;
         let query = {};
 
-        const today = new Date().toISOString().split('T')[0];
+        const todayStr = require('../utils/date').getTurkeyTodayString();
 
         if (view === 'archive') {
             // Archive: Cancelled OR Past dates
             query = {
                 $or: [
                     { status: 'cancelled' },
-                    { date: { $lt: today } }
+                    { date: { $lt: todayStr } }
                 ]
             };
         } else {
@@ -69,13 +69,18 @@ const getAppointments = async (req, res, next) => {
                 query.date = date;
             } else {
                 // Default List View: Today onwards
-                query.date = { $gte: today };
+                query.date = { $gte: todayStr };
             }
         }
 
         // Filter by Barber if requested OR if user is a BARBER
         if (req.user.role === 'BARBER') {
-            query.barberId = req.user.id;
+            // BARBER sees their own OR unassigned (null/not exists)
+            query.$or = [
+                { barberId: req.user.id },
+                { barberId: null },
+                { barberId: { $exists: false } }
+            ];
         } else if (barberId) {
             query.barberId = barberId;
         }

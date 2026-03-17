@@ -2,6 +2,7 @@ const Appointment = require('../models/appointment.model');
 const Settings = require('../models/settings.model');
 const ClosedDate = require('../models/closedDate.model');
 const logger = require('../config/logger');
+const dateUtils = require('../utils/date');
 
 // Helper to get business hours (cached or fresh)
 const getBusinessHours = async () => {
@@ -9,15 +10,12 @@ const getBusinessHours = async () => {
     return {
         start: settings.appointmentStartHour || 8,
         end: settings.appointmentEndHour || 21
-        // Note: end is exclusive in loop usually, or inclusive? 
-        // Original code: i < END_HOUR. If END=21, last slot is 20:00. Settings usually imply "Closing Time".
     };
 };
 
 const generateSlots = (start, end) => {
     const slots = [];
     for (let i = start; i < end; i++) {
-        // Only Full Hours
         const hourString = `${i.toString().padStart(2, '0')}:00`;
         slots.push(hourString);
     }
@@ -33,31 +31,28 @@ const getAvailableSlots = async (date, barberId) => {
     // 1. Check if Closed Date
     const isClosed = await ClosedDate.findOne({ date });
     if (isClosed) {
-        return []; // No slots available on holidays
+        return [];
     }
 
-    // 2. Check if day of week is closed (e.g., Sunday)
+    // 2. Check if day of week is closed
     const settings = await Settings.getSettings();
     const dateObj = new Date(date + 'T00:00:00');
-    const dayOfWeek = dateObj.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+    const dayOfWeek = dateObj.getDay();
 
     if (settings.closedWeekDays && settings.closedWeekDays.includes(dayOfWeek)) {
-        return []; // No slots on closed week days (e.g., Sundays)
+        return [];
     }
 
     // 3. Get Settings
     const { start, end } = await getBusinessHours();
     const allSlots = generateSlots(start, end);
 
-    // Build query - Check confirmed reservations for this date
-    // Important: We must filter by barberId if provided, otherwise check ALL appointments if user hasn't selected a barber (but in our flow they always do)
     const query = {
         date: date,
         status: 'confirmed'
     };
 
     if (barberId) {
-        // Check for THIS barber OR Global Blocks (barberId is null)
         query.$or = [
             { barberId: barberId },
             { barberId: null },
@@ -68,23 +63,21 @@ const getAvailableSlots = async (date, barberId) => {
     const bookedAppointments = await Appointment.find(query).select('hour');
     const bookedHours = bookedAppointments.map(app => app.hour);
 
-    // Filter out booked slots
     let availableSlots = allSlots.filter(slot => !bookedHours.includes(slot));
 
-    // Filter out past hours if date is today
-    const today = new Date();
-    const dateStr = today.toISOString().split('T')[0];
+    // Filter out past hours if date is today (Turkey Time)
+    const todayStr = dateUtils.getTurkeyTodayString();
 
-    if (date === dateStr) {
-        const currentHour = today.getHours();
-        const currentMinute = today.getMinutes();
-        // Allow booking at least 30 mins in advance? logic:
-        // simple logic: remove slots where hour < currentHour
-        // or hour == currentHour but passed
+    if (date === todayStr) {
+        const currentHour = dateUtils.getTurkeyHour();
+        // Allow booking only for future hours
         availableSlots = availableSlots.filter(slot => {
-            const [h, m] = slot.split(':').map(Number);
-            return h > currentHour; // Only future hours
+            const [h] = slot.split(':').map(Number);
+            return h > currentHour;
         });
+    } else if (date < todayStr) {
+        // No slots for past days
+        return [];
     }
 
     return availableSlots;
@@ -92,13 +85,22 @@ const getAvailableSlots = async (date, barberId) => {
 
 /**
  * Create a new appointment
- * @param {Object} data - { customerName, phone, date, hour, service, createdFrom, barberId, barberName }
- * @returns {Promise<Object>}
  */
 const createAppointment = async (data) => {
-    const appointmentDateTime = new Date(`${data.date}T${data.hour}`);
-    if (appointmentDateTime < new Date()) {
-        throw new Error('Geçmiş zamana randevu alınamaz.');
+    const todayStr = dateUtils.getTurkeyTodayString();
+    const currentHour = dateUtils.getTurkeyHour();
+
+    // Past date check
+    if (data.date < todayStr) {
+        throw new Error('Geçmiş tarihe randevu alınamaz.');
+    }
+    
+    // Today but past hour check
+    if (data.date === todayStr) {
+        const [h] = data.hour.split(':').map(Number);
+        if (h <= currentHour) {
+            throw new Error('Geçmiş saate randevu alınamaz.');
+        }
     }
 
     // Check Closed Date
@@ -107,27 +109,24 @@ const createAppointment = async (data) => {
         throw new Error(`Seçilen tarih (${data.date}) işletmemiz kapalıdır: ${isClosed.reason}`);
     }
 
-    // Check if day of week is closed (e.g., Sunday)
+    // Check Weekday
     const settings = await Settings.getSettings();
-    const closedWeekDays = settings.closedWeekDays || [0];
+    const closedWeekDays = settings.closedWeekDays || [];
     const dateObj = new Date(data.date + 'T00:00:00');
     const dayOfWeek = dateObj.getDay();
 
     if (closedWeekDays.includes(dayOfWeek)) {
         const dayNames = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
-        throw new Error(`${dayNames[dayOfWeek]} günleri açık değiliz. Lütfen başka bir gün seçiniz.`);
+        throw new Error(`${dayNames[dayOfWeek]} günleri açık değiliz.`);
     }
 
-    // Manual Conflict Check (Multi-Barber Support)
-    // We cannot rely solely on unique index anymore because multiple barbers can have same slot
+    // Conflict Query
     const conflictQuery = {
         date: data.date,
         hour: data.hour,
         status: 'confirmed'
     };
     if (data.barberId) {
-        // Updated Conflict Check:
-        // Must clash if slot is taken by SAME barber OR by a GLOBAL BLOCK (null)
         conflictQuery.$or = [
             { barberId: data.barberId },
             { barberId: null },
@@ -149,31 +148,26 @@ const createAppointment = async (data) => {
             service: data.service || 'sac',
             createdFrom: data.createdFrom,
             status: 'confirmed',
-            barberId: data.barberId,      // New Field
-            barberName: data.barberName   // New Field
+            barberId: data.barberId,
+            barberName: data.barberName
         });
 
         const savedAppointment = await appointment.save();
         logger.info(`Appointment created: ${savedAppointment._id} for ${data.phone} (Barber: ${data.barberName})`);
 
-        // Send WhatsApp Notification
+        // Send WhatsApp Notification (Async)
         try {
             const whatsappService = require('./whatsapp.service');
             let message = `Sayın ${data.customerName},\n${data.date} tarihinde saat ${data.hour} için randevunuz oluşturulmuştur.\n`;
             if (data.barberName) message += `Berber: ${data.barberName}\n`;
             message += `Bizi tercih ettiğiniz için teşekkür ederiz.`;
-
-            // Use clean phone, let service handle formatting
-            await whatsappService.sendMessage(data.phone, message);
-        } catch (waError) {
-            logger.error('WhatsApp notification failed', waError);
-        }
+            whatsappService.sendMessage(data.phone, message).catch(e => logger.error('WA Send fail', e));
+        } catch (waError) {}
 
         return savedAppointment;
 
     } catch (error) {
         if (error.code === 11000) {
-            // Fallback for race condition
             throw new Error('Bu saat maalesef dolu. Lütfen başka bir saat seçin.');
         }
         throw error;
@@ -182,15 +176,14 @@ const createAppointment = async (data) => {
 
 /**
  * Get active appointment for a phone number
- * @param {string} phone 
  */
 const getMyAppointment = async (phone) => {
-    const today = new Date().toISOString().split('T')[0];
+    const todayStr = dateUtils.getTurkeyTodayString();
 
     const appointment = await Appointment.findOne({
         phone: phone,
         status: 'confirmed',
-        date: { $gte: today }
+        date: { $gte: todayStr }
     }).sort({ date: 1, hour: 1 });
 
     return appointment;
@@ -198,7 +191,6 @@ const getMyAppointment = async (phone) => {
 
 /**
  * Cancel an appointment
- * @param {string} id 
  */
 const cancelAppointment = async (id) => {
     const appointment = await Appointment.findById(id);
@@ -212,24 +204,18 @@ const cancelAppointment = async (id) => {
     return appointment;
 };
 
-/**
- * Get customer appointment history
- * @param {string} phone 
- */
 const getCustomerHistory = async (phone) => {
     const appointments = await Appointment.find({
         phone: phone
     }).sort({ date: -1, hour: -1 }).limit(10);
-
     return appointments;
 };
 
 const deleteAppointment = async (id) => {
     const result = await Appointment.findByIdAndDelete(id);
     if (!result) {
-        throw new Error('Randevu bulunamadı veya zaten silinmiş.');
+        throw new Error('Randevu bulunamadı.');
     }
-    logger.info(`Appointment deleted permanently: ${id}`);
     return result;
 };
 
@@ -242,11 +228,14 @@ const getDailyAppointments = async (date) => {
 };
 
 const cleanupOldAppointments = async () => {
-    const sevenDaysAgo = new Date();
+    const sevenDaysAgo = dateUtils.getTurkeyNow();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const dateStr = sevenDaysAgo.toISOString().split('T')[0];
+    
+    const year = sevenDaysAgo.getFullYear();
+    const month = String(sevenDaysAgo.getMonth() + 1).padStart(2, '0');
+    const day = String(sevenDaysAgo.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
 
-    // Delete appointments older than 7 days
     const result = await Appointment.deleteMany({
         date: { $lt: dateStr }
     });
