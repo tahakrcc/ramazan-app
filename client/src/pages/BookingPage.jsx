@@ -358,6 +358,12 @@ const BookingFlow = ({ onBack, services, settings }) => {
     const [formData, setFormData] = useState({ name: '', phone: '', secondName: '', secondPhone: '' });
     const [showSecondPerson, setShowSecondPerson] = useState(false);
     const [barbers, setBarbers] = useState([]);
+    
+    // OTP States
+    const [verificationSent, setVerificationSent] = useState(false);
+    const [otpCode, setOtpCode] = useState('');
+    const [isVerifying, setIsVerifying] = useState(false);
+    const [isSendingCode, setIsSendingCode] = useState(false);
 
     useEffect(() => {
         // Fetch barbers
@@ -431,9 +437,54 @@ const BookingFlow = ({ onBack, services, settings }) => {
         }
     };
 
+    const handleSendOTP = async () => {
+        if (!formData.phone || formData.phone.length < 10) {
+            toast.error('Lütfen geçerli bir telefon numarası giriniz.');
+            return;
+        }
+        setIsSendingCode(true);
+        try {
+            await API.post('/verify/send-code', { phone: formData.phone });
+            setVerificationSent(true);
+            toast.success('Doğrulama kodu WhatsApp ile gönderildi.');
+        } catch (error) {
+            toast.error(error.response?.data?.error || 'Kod gönderilemedi.');
+        } finally {
+            setIsSendingCode(false);
+        }
+    };
+
+    const handleVerifyOTP = async () => {
+        if (!otpCode || otpCode.length !== 6) {
+            toast.error('Lütfen 6 haneli kodu giriniz.');
+            return;
+        }
+        setIsVerifying(true);
+        try {
+            await API.post('/verify/check-code', { phone: formData.phone, code: otpCode });
+            toast.success('Telefon doğrulandı!');
+            // Proceed to final booking
+            await finalizeBooking();
+        } catch (error) {
+            toast.error(error.response?.data?.error || 'Geçersiz kod.');
+        } finally {
+            setIsVerifying(false);
+        }
+    };
+
     const submitBooking = async (e) => {
         e.preventDefault();
+        
+        // If already verified, just finalize
+        // But usually we want to trigger OTP if not verified
+        if (!verificationSent) {
+            await handleSendOTP();
+        } else {
+            await handleVerifyOTP();
+        }
+    };
 
+    const finalizeBooking = async () => {
         // Confirmation Dialog
         if (!window.confirm('Randevuyu onaylıyor musunuz?')) return;
 
@@ -752,6 +803,30 @@ const BookingFlow = ({ onBack, services, settings }) => {
                                     </div>
                                 </div>
 
+                                {/* OTP Section */}
+                                <AnimatePresence>
+                                    {verificationSent && (
+                                        <motion.div
+                                            initial={{ height: 0, opacity: 0 }}
+                                            animate={{ height: 'auto', opacity: 1 }}
+                                            className="space-y-4 pt-6 border-t border-gold-500/20"
+                                        >
+                                            <div className="space-y-2">
+                                                <label className="text-xs uppercase tracking-widest text-gold-500 font-bold ml-1">Doğrulama Kodu (WhatsApp)</label>
+                                                <input
+                                                    type="text"
+                                                    value={otpCode}
+                                                    onChange={e => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                                    className="w-full bg-white/10 border-b-2 border-gold-500 py-4 px-4 text-3xl tracking-[0.3em] font-mono text-center text-gold-500 focus:outline-none focus:bg-white/20 transition-all rounded-t-sm"
+                                                    placeholder="000000"
+                                                    maxLength={6}
+                                                />
+                                                <p className="text-[10px] text-gray-500 text-center uppercase tracking-widest">WhatsApp'ınıza gelen 6 haneli kodu giriniz.</p>
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+
                                 {/* 2. Person (Optional) */}
                                 {isDoubleBooking && (
                                     <div className="pt-6 border-t border-white/10">
@@ -803,8 +878,24 @@ const BookingFlow = ({ onBack, services, settings }) => {
                                 )}
 
                                 <div className="pt-4 md:pt-8 text-center">
-                                    <button type="submit" className="w-full bg-gold-500 text-dark-950 py-4 md:py-5 font-bold uppercase tracking-[0.2em] hover:bg-white hover:scale-[1.02] transition-all rounded-sm shadow-[0_0_20px_rgba(212,175,55,0.2)] text-sm md:text-base">
-                                        {isDoubleBooking ? 'Randevuları Onayla' : 'Randevuyu Onayla'}
+                                    <button
+                                        type="submit"
+                                        disabled={isSendingCode || isVerifying}
+                                        className={`w-full py-5 md:py-6 rounded-sm uppercase tracking-[0.2em] font-bold text-sm transition-all duration-500 relative overflow-hidden group ${
+                                            verificationSent 
+                                            ? 'bg-gold-500 text-dark-950 hover:shadow-[0_0_30px_rgba(212,175,55,0.4)]' 
+                                            : 'bg-white text-dark-950 hover:bg-gold-500'
+                                        }`}
+                                    >
+                                        <span className="relative z-10">
+                                            {isSendingCode 
+                                                ? 'Kod Gönderiliyor...' 
+                                                : isVerifying 
+                                                    ? 'Doğrulanıyor...' 
+                                                    : verificationSent 
+                                                        ? 'Kodu Doğrula ve Onayla' 
+                                                        : 'Doğrulama Kodu Gönder'}
+                                        </span>
                                     </button>
                                 </div>
                             </form>

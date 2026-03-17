@@ -94,9 +94,17 @@ const create = async (req, res, next) => {
         }
 
         // 2. Call Service
+        if (value.createdFrom === 'web') {
+            const verificationService = require('../services/verification.service');
+            const isVerified = await verificationService.isVerified(value.phone);
+            if (!isVerified) {
+                return res.status(403).json({ error: 'Lütfen telefon numaranızı doğrulayınız.' });
+            }
+        }
+
         const appointment = await appointmentService.createAppointment({
             ...value,
-            createdFrom: 'web'
+            createdFrom: value.createdFrom || 'web'
         });
 
         res.status(201).json(appointment);

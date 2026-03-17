@@ -4,12 +4,14 @@ const appointmentRoutes = require('./appointment.routes');
 const adminRoutes = require('./admin.routes');
 const feedbackRoutes = require('./feedback.routes');
 const complaintRoutes = require('./complaint.routes');
+const verificationRoutes = require('./verification.routes');
 
 // Routes (apiLimiter already applied at app.js level)
 router.use('/appointments', appointmentRoutes);
 router.use('/admin', adminRoutes);
 router.use('/feedbacks', feedbackRoutes);
 router.use('/complaints', complaintRoutes);
+router.use('/verify', verificationRoutes);
 
 // Public settings endpoint (no auth required)
 router.get('/settings/public', async (req, res, next) => {
