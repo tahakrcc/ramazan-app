@@ -11,7 +11,7 @@ router.post('/bot-hook', feedbackController.createFeedbackFromBot);
 
 // Admin
 router.get('/', authMiddleware.protect, feedbackController.getAllFeedbacks);
-router.put('/:id', authMiddleware.protect, feedbackController.updateFeedbackStatus);
-router.delete('/:id', authMiddleware.protect, feedbackController.deleteFeedback);
+router.put('/:id', authMiddleware.protect, authMiddleware.restrictTo('ADMIN'), feedbackController.updateFeedbackStatus);
+router.delete('/:id', authMiddleware.protect, authMiddleware.restrictTo('ADMIN'), feedbackController.deleteFeedback);
 
 module.exports = router;

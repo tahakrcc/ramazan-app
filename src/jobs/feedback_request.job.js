@@ -4,21 +4,14 @@ const BotState = require('../models/botState.model');
 const whatsappService = require('../services/whatsapp.service');
 const logger = require('../config/logger');
 
-// Helper: Get current time in Turkey (UTC+3)
-const getTurkeyNow = () => {
-    const now = new Date();
-    // Offset to Turkey Time (UTC+3) = add 3 hours in ms
-    const turkeyOffset = 3 * 60 * 60 * 1000;
-    const turkeyTime = new Date(now.getTime() + turkeyOffset);
-    return turkeyTime;
-};
+const dateUtils = require('../utils/date');
 
 // Run every 30 minutes
 cron.schedule('*/30 * * * *', async () => {
     try {
-        const turkeyNow = getTurkeyNow();
-        const todayStr = turkeyNow.toISOString().split('T')[0];
-        const currentHour = turkeyNow.getUTCHours(); // Use getUTCHours since we already offset
+        const turkeyNow = dateUtils.getTurkeyNow();
+        const todayStr = dateUtils.getTurkeyTodayString();
+        const currentHour = dateUtils.getTurkeyHour();
 
         logger.info(`Feedback job running. Turkey time: ${todayStr} ${currentHour}:xx`);
 

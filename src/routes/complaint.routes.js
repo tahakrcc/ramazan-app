@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Complaint = require('../models/complaint.model');
-const { protect } = require('../middlewares/auth.middleware');
+const { protect, restrictTo } = require('../middlewares/auth.middleware');
 
 // Protect all routes
 router.use(protect);
@@ -17,7 +17,7 @@ router.get('/', async (req, res, next) => {
 });
 
 // PATCH (Resolve)
-router.patch('/:id/resolve', async (req, res, next) => {
+router.patch('/:id/resolve', restrictTo('ADMIN'), async (req, res, next) => {
     try {
         const complaint = await Complaint.findByIdAndUpdate(
             req.params.id,
@@ -31,7 +31,7 @@ router.patch('/:id/resolve', async (req, res, next) => {
 });
 
 // DELETE
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', restrictTo('ADMIN'), async (req, res, next) => {
     try {
         await Complaint.findByIdAndDelete(req.params.id);
         res.json({ message: 'Şikayet silindi' });

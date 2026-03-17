@@ -153,7 +153,7 @@ const sendBroadcast = async (req, res, next) => {
         if (!message) return res.status(400).json({ error: 'Message is required' });
 
         let phones = [];
-        const today = new Date().toISOString().split('T')[0];
+        const today = require('../utils/date').getTurkeyTodayString();
 
         if (filter === 'active') {
             // Get unique phones from confirmed future appointments

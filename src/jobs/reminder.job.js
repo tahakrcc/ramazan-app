@@ -3,18 +3,13 @@ const Appointment = require('../models/appointment.model');
 const whatsappService = require('../services/whatsapp.service');
 const logger = require('../config/logger');
 
-// Helper: Get current time in Turkey (UTC+3)
-const getTurkeyNow = () => {
-    const now = new Date();
-    const turkeyOffset = 3 * 60 * 60 * 1000;
-    return new Date(now.getTime() + turkeyOffset);
-};
+const dateUtils = require('../utils/date');
 
 // Run every 10 minutes to check for upcoming appointments
 cron.schedule('*/10 * * * *', async () => {
     try {
-        const turkeyNow = getTurkeyNow();
-        const todayStr = turkeyNow.toISOString().split('T')[0];
+        const turkeyNow = dateUtils.getTurkeyNow();
+        const todayStr = dateUtils.getTurkeyTodayString();
 
         // Time windows using Turkey time
         // --- 1 HOUR REMINDER (50-70 mins before appointment) ---

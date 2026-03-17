@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/admin.controller');
-const { protect } = require('../middlewares/auth.middleware');
+const { protect, restrictTo } = require('../middlewares/auth.middleware');
 const { loginLimiter } = require('../middlewares/rateLimiter');
 const appointmentService = require('../services/appointment.service');
+const dateUtils = require('../utils/date');
 const ClosedDate = require('../models/closedDate.model');
 const Service = require('../models/service.model');
 const Appointment = require('../models/appointment.model');
@@ -58,10 +59,13 @@ router.get('/appointments/search', protect, async (req, res, next) => {
         const { q } = req.query;
         if (!q) return res.json([]);
 
+        // Security: Escape regex special characters to prevent ReDoS or logic errors
+        const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
         const appointments = await Appointment.find({
             $or: [
-                { customerName: { $regex: q, $options: 'i' } },
-                { phone: { $regex: q, $options: 'i' } }
+                { customerName: { $regex: escapedQ, $options: 'i' } },
+                { phone: { $regex: escapedQ, $options: 'i' } }
             ]
         }).sort({ date: -1, hour: -1 }).limit(50);
 
@@ -81,7 +85,7 @@ router.get('/closed-dates', protect, async (req, res, next) => {
     }
 });
 
-router.post('/closed-dates', protect, async (req, res, next) => {
+router.post('/closed-dates', protect, restrictTo('ADMIN'), async (req, res, next) => {
     try {
         const { date, reason } = req.body;
         const closedDate = await ClosedDate.create({ date, reason: reason || 'Tatil' });
@@ -95,7 +99,7 @@ router.post('/closed-dates', protect, async (req, res, next) => {
     }
 });
 
-router.delete('/closed-dates/:id', protect, async (req, res, next) => {
+router.delete('/closed-dates/:id', protect, restrictTo('ADMIN'), async (req, res, next) => {
     try {
         await ClosedDate.findByIdAndDelete(req.params.id);
         res.json({ message: 'Kapalı gün silindi.' });
@@ -114,7 +118,7 @@ router.get('/services', protect, async (req, res, next) => {
     }
 });
 
-router.post('/services', protect, async (req, res, next) => {
+router.post('/services', protect, restrictTo('ADMIN'), async (req, res, next) => {
     try {
         const { id, name, price, duration } = req.body;
         const service = await Service.create({ id, name, price, duration: duration || 60 });
@@ -128,7 +132,7 @@ router.post('/services', protect, async (req, res, next) => {
     }
 });
 
-router.put('/services/:id', protect, async (req, res, next) => {
+router.put('/services/:id', protect, restrictTo('ADMIN'), async (req, res, next) => {
     try {
         const { name, price, duration, isActive } = req.body;
         const service = await Service.findByIdAndUpdate(
@@ -142,7 +146,7 @@ router.put('/services/:id', protect, async (req, res, next) => {
     }
 });
 
-router.delete('/services/:id', protect, async (req, res, next) => {
+router.delete('/services/:id', protect, restrictTo('ADMIN'), async (req, res, next) => {
     try {
         await Service.findByIdAndDelete(req.params.id);
         res.json({ message: 'Hizmet silindi.' });
@@ -154,10 +158,14 @@ router.delete('/services/:id', protect, async (req, res, next) => {
 // =============== STATISTICS ===============
 router.get('/stats', protect, async (req, res, next) => {
     try {
-        const now = new Date();
-        const today = now.toISOString().split('T')[0];
-        const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const monthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const todayStr = dateUtils.getTurkeyTodayString();
+        const turkeyNow = dateUtils.getTurkeyNow();
+        
+        const weekAgoDate = new Date(turkeyNow.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const monthAgoDate = new Date(turkeyNow.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+        const weekAgo = weekAgoDate.toISOString().split('T')[0];
+        const monthAgo = monthAgoDate.toISOString().split('T')[0];
 
         // Get all confirmed appointments
         const allAppointments = await Appointment.find({ status: 'confirmed' });
@@ -173,7 +181,7 @@ router.get('/stats', protect, async (req, res, next) => {
         const getPrice = (serviceId) => priceMap[serviceId] || defaultPrices[serviceId] || 0;
 
         // Calculate stats
-        const todayAppointments = allAppointments.filter(a => a.date === today);
+        const todayAppointments = allAppointments.filter(a => a.date === todayStr);
         const weekAppointments = allAppointments.filter(a => a.date >= weekAgo);
         const monthAppointments = allAppointments.filter(a => a.date >= monthAgo);
 
@@ -226,7 +234,7 @@ router.get('/settings', protect, async (req, res, next) => {
     }
 });
 
-router.put('/settings', protect, async (req, res, next) => {
+router.put('/settings', protect, restrictTo('ADMIN'), async (req, res, next) => {
     try {
         const Settings = require('../models/settings.model');
         const { appointmentStartHour, appointmentEndHour, bookingRangeDays, businessAddress, businessMapsLink, closedWeekDays } = req.body;
@@ -289,7 +297,7 @@ router.post('/whatsapp/reset', protect, async (req, res, next) => {
 // =============== STAFF MANAGEMENT ===============
 const AdminUser = require('../models/admin.model'); // Admin model is effectively User model
 
-router.get('/staff', protect, async (req, res, next) => {
+router.get('/staff', protect, restrictTo('ADMIN'), async (req, res, next) => {
     try {
         const staff = await AdminUser.find().select('-passwordHash').sort({ createdAt: -1 });
         res.json(staff);
@@ -298,7 +306,7 @@ router.get('/staff', protect, async (req, res, next) => {
     }
 });
 
-router.post('/staff', protect, async (req, res, next) => {
+router.post('/staff', protect, restrictTo('ADMIN'), async (req, res, next) => {
     try {
         const { username, password, name, role, color } = req.body;
 
@@ -331,7 +339,7 @@ router.post('/staff', protect, async (req, res, next) => {
     }
 });
 
-router.put('/staff/:id', protect, async (req, res, next) => {
+router.put('/staff/:id', protect, restrictTo('ADMIN'), async (req, res, next) => {
     try {
         const { username, password, name, role, color, isActive } = req.body;
         const { id } = req.params;
@@ -369,7 +377,7 @@ router.put('/staff/:id', protect, async (req, res, next) => {
     }
 });
 
-router.delete('/staff/:id', protect, async (req, res, next) => {
+router.delete('/staff/:id', protect, restrictTo('ADMIN'), async (req, res, next) => {
     try {
         const { id } = req.params;
 

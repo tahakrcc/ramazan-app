@@ -10,6 +10,7 @@ const BotState = require('../models/botState.model');
 const Feedback = require('../models/feedback.model');
 const Complaint = require('../models/complaint.model');
 const appointmentService = require('./appointment.service');
+const dateUtils = require('../utils/date');
 const { format, addDays } = require('date-fns');
 // date-fns v3+ uses named exports from locale package
 let trLocale;
@@ -135,8 +136,8 @@ const notifyAdmin = async (message) => {
 
 const parseDateInput = (input) => {
     const lower = input.toLocaleLowerCase('tr-TR');
-    const today = new Date();
-    if (lower.includes('bugün')) return format(today, 'yyyy-MM-dd');
+    const today = dateUtils.getTurkeyNow();
+    if (lower.includes('bugün')) return dateUtils.getTurkeyTodayString();
     if (lower.includes('yarın')) return format(addDays(today, 1), 'yyyy-MM-dd');
     return null;
 };
@@ -539,8 +540,9 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
             let dateOptions = [];
             let optionCounter = 0;
+            const turkeyNow = dateUtils.getTurkeyNow();
             for (let i = 0; i < maxDays; i++) {
-                const d = addDays(new Date(), i);
+                const d = addDays(turkeyNow, i);
                 const dayOfWeek = d.getDay();
                 if (closedWeekDays.includes(dayOfWeek)) continue;
                 const dateStr = format(d, 'yyyy-MM-dd');
@@ -641,8 +643,9 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 // Build date options (skip closed week days AND specific closed dates)
                 let dateOptions = [];
                 let optionCounter = 0;
+                const turkeyNow = dateUtils.getTurkeyNow();
                 for (let i = 0; i < maxDays; i++) {
-                    const d = addDays(new Date(), i);
+                    const d = addDays(turkeyNow, i);
                     const dayOfWeek = d.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
 
                     // Skip if this day of week is closed
@@ -709,9 +712,9 @@ const processBotLogic = async (remoteJid, text, msg) => {
         let selectedDate = null;
         const settings = await getSettings();
         const maxDays = settings.bookingRangeDays || 7;
-        const today = new Date();
-        const todayStr = format(today, 'yyyy-MM-dd');
-        const maxDateStr = format(addDays(today, maxDays - 1), 'yyyy-MM-dd');
+        const turkeyNow = dateUtils.getTurkeyNow();
+        const todayStr = dateUtils.getTurkeyTodayString();
+        const maxDateStr = format(addDays(turkeyNow, maxDays - 1), 'yyyy-MM-dd');
 
         // Check if input is a number (use dateOptions from session)
         const numInput = parseInt(lowerText);
@@ -1054,7 +1057,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
     // --- MY APPOINTMENT QUERY ---
     if (lowerText === 'randevum' || lowerText.includes('randevum ne zaman') || lowerText.includes('randevularım')) {
         // Use resolved 'phone' variable from top scope
-        const today = format(new Date(), 'yyyy-MM-dd');
+        const today = dateUtils.getTurkeyTodayString();
 
         try {
             // Find future appointments for this phone
@@ -1086,7 +1089,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
     // --- CANCEL MY APPOINTMENT ---
     if (lowerText.includes('randevumu iptal') || lowerText.includes('randevu iptal') || lowerText === 'iptalim') {
-        const today = format(new Date(), 'yyyy-MM-dd');
+        const today = dateUtils.getTurkeyTodayString();
         // Use the resolved 'phone' variable from the top scope
 
         try {
