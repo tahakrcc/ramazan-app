@@ -716,61 +716,50 @@ const processBotLogic = async (remoteJid, text, msg) => {
         const todayStr = dateUtils.getTurkeyTodayString();
         const maxDateStr = format(addDays(turkeyNow, maxDays - 1), 'yyyy-MM-dd');
 
-        // Check if input is a number (use dateOptions from session)
-        const numInput = parseInt(lowerText);
         const sessionDateOptions = session.dateOptions || [];
 
-        if (!isNaN(numInput)) {
-            // Find date by option number
-            const matchedOption = sessionDateOptions.find(opt => opt.number === numInput);
-            if (matchedOption) {
-                selectedDate = matchedOption.date;
-            }
-        } else if (lowerText.includes('bugün')) {
+        // 1. Check for keywords
+        if (lowerText.includes('bugün')) {
             selectedDate = todayStr;
         } else if (lowerText.includes('yarın')) {
-            selectedDate = format(addDays(today, 1), 'yyyy-MM-dd');
-            // Regex: Allow YYYY-M-D or YYYY-MM-DD (relax digits)
-        } else if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(text.trim())) {
+            selectedDate = format(addDays(turkeyNow, 1), 'yyyy-MM-dd');
+        } 
+        // 2. Check for explicit YYYY-MM-DD format
+        else if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(text.trim())) {
             let inputDate = text.trim();
-
-            // Normalize to YYYY-MM-DD
             const [y, m, d] = inputDate.split('-').map(Number);
-            const yearStr = y.toString();
-            const monthStr = m.toString().padStart(2, '0');
-            const dayStr = d.toString().padStart(2, '0');
-            inputDate = `${yearStr}-${monthStr}-${dayStr}`;
-
-            // FIRST: Validate that it's a real date (not 2026-01-80)
             const dateObj = new Date(y, m - 1, d);
             const isValidDate = dateObj.getFullYear() === y &&
                 dateObj.getMonth() === m - 1 &&
                 dateObj.getDate() === d;
 
-            if (!isValidDate) {
-                await sock.sendMessage(remoteJid, {
-                    text: `⚠️ *${text.trim()}* geçerli bir tarih değil.\n\nLütfen geçerli bir tarih giriniz.\n\n⬅️ Geri için "geri" yazın.`
-                });
+            if (isValidDate) {
+                const yearStr = y.toString();
+                const monthStr = m.toString().padStart(2, '0');
+                const dayStr = d.toString().padStart(2, '0');
+                inputDate = `${yearStr}-${monthStr}-${dayStr}`;
+
+                if (inputDate < todayStr) {
+                    await sock.sendMessage(remoteJid, { text: `⚠️ Geçmiş bir tarih seçemezsiniz.\n\nLütfen bugün veya ileri bir tarih seçiniz.` });
+                    return;
+                }
+                if (inputDate > maxDateStr) {
+                    await sock.sendMessage(remoteJid, { text: `⚠️ En fazla ${maxDays} gün sonrasına randevu alabilirsiniz (Max: ${maxDateStr}).` });
+                    return;
+                }
+                selectedDate = inputDate;
+            } else {
+                await sock.sendMessage(remoteJid, { text: `⚠️ *${text.trim()}* geçerli bir tarih değil.` });
                 return;
             }
-
-            // Validate: not in the past
-            if (inputDate < todayStr) {
-                await sock.sendMessage(remoteJid, {
-                    text: `⚠️ Geçmiş bir tarih seçemezsiniz.\n\nLütfen bugün veya ileri bir tarih seçiniz.\n\n⬅️ Geri için "geri" yazın.`
-                });
-                return;
+        }
+        // 3. Finally, check for numerical index selection (e.g., "1", "2")
+        else if (!isNaN(parseInt(lowerText))) {
+            const numInput = parseInt(lowerText);
+            const matchedOption = sessionDateOptions.find(opt => opt.number === numInput);
+            if (matchedOption) {
+                selectedDate = matchedOption.date;
             }
-
-            // Validate: not too far in the future
-            if (inputDate > maxDateStr) {
-                await sock.sendMessage(remoteJid, {
-                    text: `⚠️ En fazla ${maxDays} gün sonrasına randevu alabilirsiniz.\n\nMaximum tarih: ${maxDateStr}\n\n⬅️ Geri için "geri" yazın.`
-                });
-                return;
-            }
-
-            selectedDate = inputDate;
         }
 
         if (selectedDate) {
