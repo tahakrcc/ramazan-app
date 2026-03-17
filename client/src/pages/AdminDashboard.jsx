@@ -232,8 +232,12 @@ const DashboardOverview = ({ setActiveTab }) => {
             try {
                 const res = await API.get('/admin/appointments');
                 const all = res.data || [];
+                
+                // Use Turkey Time for stats
                 const now = new Date();
-                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                const turkeyNow = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
+                const today = new Date(turkeyNow.getFullYear(), turkeyNow.getMonth(), turkeyNow.getDate());
+                
                 const tomorrow = new Date(today);
                 tomorrow.setDate(tomorrow.getDate() + 1);
                 const dayAfter = new Date(today);
@@ -287,7 +291,11 @@ const DashboardOverview = ({ setActiveTab }) => {
 
     const formatDate = (dateStr) => {
         const date = new Date(dateStr);
-        const today = new Date();
+        // Use Turkey Time for "today"
+        const now = new Date();
+        const turkeyNow = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
+        const today = new Date(turkeyNow.getFullYear(), turkeyNow.getMonth(), turkeyNow.getDate());
+        
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
 
@@ -298,8 +306,11 @@ const DashboardOverview = ({ setActiveTab }) => {
 
     const formatTimeAgo = (dateStr) => {
         const date = new Date(dateStr);
+        // Use Turkey Time for current time
         const now = new Date();
-        const diffMs = now - date;
+        const turkeyNow = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
+        
+        const diffMs = turkeyNow - date;
         const diffMins = Math.floor(diffMs / 60000);
         const diffHours = Math.floor(diffMs / 3600000);
         const diffDays = Math.floor(diffMs / 86400000);
@@ -455,24 +466,30 @@ const AppointmentsManager = () => {
         fetchBarbers();
     }, []);
 
-    const fetchAppointments = async () => {
+    const fetchAppointments = async (signal) => {
         try {
             let url = '/admin/appointments';
-            if (subTab === 'archive') {
-                url += '?view=archive';
-            }
-            if (selectedBarber) {
-                url += `${url.includes('?') ? '&' : '?'}barberId=${selectedBarber}`;
-            }
-            if (selectedDate) {
-                url += `${url.includes('?') ? '&' : '?'}date=${selectedDate}`;
-            }
-            const res = await API.get(url);
+            const params = new URLSearchParams();
+            if (subTab === 'archive') params.append('view', 'archive');
+            if (selectedBarber) params.append('barberId', selectedBarber);
+            if (selectedDate) params.append('date', selectedDate);
+            
+            const queryString = params.toString();
+            if (queryString) url += `?${queryString}`;
+
+            const res = await API.get(url, { signal });
             setAppointments(res.data);
-        } catch (error) { toast.error('Yüklenemedi: ' + (error.response?.data?.error || error.message)); }
+        } catch (error) {
+            if (error.name === 'CanceledError' || error.name === 'AbortError') return;
+            toast.error('Yüklenemedi: ' + (error.response?.data?.error || error.message));
+        }
     };
 
-    useEffect(() => { fetchAppointments(); }, [subTab, selectedBarber, selectedDate]);
+    useEffect(() => {
+        const controller = new AbortController();
+        fetchAppointments(controller.signal);
+        return () => controller.abort();
+    }, [subTab, selectedBarber, selectedDate]);
 
     // Auto-select barber if filtering by one
     useEffect(() => {
@@ -699,7 +716,7 @@ const AppointmentsManager = () => {
                                     <td className="p-4 md:p-6 text-right">
                                         <div className="flex justify-end gap-2">
                                             {app.status === 'pending' && (
-                                                <button onClick={() => handleStatusUpdate(app._id || app.id, 'confirmed')} className="p-1 bg-green-500/20 text-green-400 rounded hover:bg-green-500 hover:text-dark-950">✓</button>
+                                                <button onClick={() => handleStatusUpdate(app._id || app.id, 'confirmed')} className="p-1 bg-green-500/20 text-green-400 rounded hover:bg-green-500 hover:text-dark-950" title="Onayla">✓</button>
                                             )}
                                             <button
                                                 onClick={() => openEditModal(app)}
@@ -708,10 +725,7 @@ const AppointmentsManager = () => {
                                             >
                                                 ✏️
                                             </button>
-                                            {app.status === 'pending' && (
-                                                <button onClick={() => handleStatusUpdate(app._id || app.id, 'confirmed')} className="p-1 bg-green-500/20 text-green-400 rounded hover:bg-green-500 hover:text-dark-950">✓</button>
-                                            )}
-                                            <button onClick={() => handleDelete(app._id || app.id)} className="p-1 bg-red-500/20 text-red-400 rounded hover:bg-red-500 hover:text-white">✕</button>
+                                            <button onClick={() => handleDelete(app._id || app.id)} className="p-1 bg-red-500/20 text-red-400 rounded hover:bg-red-500 hover:text-white" title="Sil">✕</button>
                                         </div>
                                     </td>
                                 </tr>

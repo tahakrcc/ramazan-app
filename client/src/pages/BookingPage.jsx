@@ -639,8 +639,11 @@ const BookingFlow = ({ onBack, services, settings }) => {
 
                                 <div id="date-scroller" className="flex gap-3 md:gap-4 overflow-x-auto pb-8 mb-8 hide-scrollbar px-1 scroll-smooth">
                                     {Array.from({ length: settings?.bookingRangeDays || 14 }).map((_, i) => {
-                                        const d = format(addDays(new Date(), i), 'yyyy-MM-dd');
-                                        const dateObj = addDays(new Date(), i);
+                                        // Use Turkey Time for date scroller
+                                        const now = new Date();
+                                        const turkeyNow = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
+                                        const dateObj = addDays(turkeyNow, i);
+                                        const d = format(dateObj, 'yyyy-MM-dd');
                                         const dayOfWeek = dateObj.getDay(); // 0=Sunday
                                         const isClosed = settings.closedWeekDays?.includes(dayOfWeek);
                                         const isSelected = selection.date === d;

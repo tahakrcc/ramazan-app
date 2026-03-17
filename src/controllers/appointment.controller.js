@@ -131,15 +131,26 @@ const getMy = async (req, res, next) => {
 const cancel = async (req, res, next) => {
     try {
         const { id } = req.params;
+        const { phone } = req.body;
+
+        if (!phone) {
+            return res.status(400).json({ error: 'İptal işlemi için telefon numarası gereklidir.' });
+        }
 
         // Validate MongoDB ObjectId format
         if (!/^[0-9a-fA-F]{24}$/.test(id)) {
             return res.status(400).json({ error: 'Geçersiz randevu ID' });
         }
 
-        await appointmentService.cancelAppointment(id);
-        res.json({ message: 'Randevu iptal edildi.' });
+        // Sanitize phone
+        const sanitizedPhone = phone.replace(/\D/g, '');
+
+        await appointmentService.cancelAppointment(id, sanitizedPhone);
+        res.json({ message: 'Randevu başarıyla iptal edildi.' });
     } catch (error) {
+        if (error.message.includes('yetki')) {
+            return res.status(403).json({ error: error.message });
+        }
         next(error);
     }
 }

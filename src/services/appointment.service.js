@@ -192,15 +192,20 @@ const getMyAppointment = async (phone) => {
 /**
  * Cancel an appointment
  */
-const cancelAppointment = async (id) => {
+const cancelAppointment = async (id, phone) => {
     const appointment = await Appointment.findById(id);
     if (!appointment) {
         throw new Error('Randevu bulunamadı.');
     }
 
+    // Security Check: If phone is provided (public cancel), it must match
+    if (phone && appointment.phone !== phone) {
+        throw new Error('Bu randevuyu iptal etme yetkiniz bulunmamaktadır.');
+    }
+
     appointment.status = 'cancelled';
     await appointment.save();
-    logger.info(`Appointment cancelled: ${id}`);
+    logger.info(`Appointment cancelled: ${id} (Verified Phone: ${phone || 'Admin Override'})`);
     return appointment;
 };
 
