@@ -143,9 +143,29 @@ const parseDateInput = (input) => {
 };
 
 // --- Main Initialization ---
+let isInitInProgress = false;
+
 const initialize = async (forceFresh = false) => {
+    if (isInitInProgress) {
+        logger.warn('WhatsApp Initialization already in progress, skipping...');
+        return;
+    }
+
     try {
+        isInitInProgress = true;
         logger.info(`Initializing WhatsApp Service... (forceFresh: ${forceFresh})`);
+
+        // Ensure the old socket is closed properly before a new one is created
+        if (sock) {
+            try {
+                logger.info('Closing existing WhatsApp socket before re-init');
+                sock.ev.removeAllListeners();
+                sock.end();
+                sock = null;
+            } catch (e) {
+                logger.error('Error closing old socket', e);
+            }
+        }
 
         // We only forcefully clean the auth state if we are explicitly requested to (logout/405 recovery)
         if (forceFresh) {
@@ -247,6 +267,8 @@ const initialize = async (forceFresh = false) => {
     } catch (error) {
         logger.error('WhatsApp Initialization Error:', error);
         setTimeout(() => initialize(false), 5000); // Retry on fatal error
+    } finally {
+        isInitInProgress = false;
     }
 };
 
@@ -274,6 +296,9 @@ const handleMessage = async (msg) => {
                     await sock.sendMessage(remoteJid, { text: 'Pong!' });
                 }
 
+                // Show typing indicator
+                await sock.sendPresenceUpdate('composing', remoteJid);
+
                 await processBotLogic(remoteJid, text, msg);
             } catch (err) {
                 logger.error('Message Handle Error:', err);
@@ -295,31 +320,63 @@ const handleMessage = async (msg) => {
 };
 
 // --- User Session Tracking for Booking Flow ---
-const userSessions = {}; // { remoteJid: { step, barberId, barberName, date, hour, customerName, lastUpdated } }
-
 const SESSION_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 
-const getSession = (jid) => {
-    const session = userSessions[jid];
-    if (!session) return { step: 'IDLE' };
+// --- User Session Tracking (Database Persistent) ---
+// Normalize JID to ignore device ID (e.g. 123:1@s.whatsapp.net -> 123@s.whatsapp.net)
+const normalizeJid = (jid) => {
+    if (!jid) return jid;
+    const parts = jid.split('@');
+    if (parts.length < 2) return jid;
+    const userPart = parts[0].split(':')[0];
+    return `${userPart}@${parts[1]}`;
+};
 
-    // Check timeout
-    if (Date.now() - session.lastUpdated > SESSION_TIMEOUT) {
-        delete userSessions[jid];
+// We replace the in-memory userSessions with persistent BotState storage
+const getSession = async (jid) => {
+    try {
+        const sjid = normalizeJid(jid);
+        const state = await BotState.findOne({ phone: sjid });
+        if (!state || !state.data?.bookingFlow) return { step: 'IDLE' };
+
+        // Check timeout
+        if (Date.now() - state.updatedAt.getTime() > SESSION_TIMEOUT) {
+            await BotState.findOneAndUpdate({ phone: jid }, { $unset: { "data.bookingFlow": 1 } });
+            return { step: 'IDLE' };
+        }
+        return state.data.bookingFlow;
+    } catch (e) {
+        logger.error('Get session error', e);
         return { step: 'IDLE' };
     }
-    return session;
 };
 
-const setSession = (jid, data) => {
-    userSessions[jid] = {
-        ...getSession(jid),
-        ...data,
-        lastUpdated: Date.now()
-    };
+const setSession = async (jid, data) => {
+    try {
+        const sjid = normalizeJid(jid);
+        const current = await getSession(sjid);
+        const updated = { ...current, ...data };
+        await BotState.findOneAndUpdate(
+            { phone: sjid },
+            { 
+                $set: { "data.bookingFlow": updated, updatedAt: new Date() },
+                $setOnInsert: { state: 'IDLE' } // Ensure basic fields exist
+            },
+            { upsert: true }
+        );
+    } catch (e) {
+        logger.error('Set session error', e);
+    }
 };
 
-const clearSession = (jid) => { delete userSessions[jid]; };
+const clearSession = async (jid) => {
+    try {
+        const sjid = normalizeJid(jid);
+        await BotState.findOneAndUpdate({ phone: sjid }, { $unset: { "data.bookingFlow": 1 } });
+    } catch (e) {
+        logger.error('Clear session error', e);
+    }
+};
 
 // --- Bot Logic with Booking Flow ---
 const processBotLogic = async (remoteJid, text, msg) => {
@@ -370,7 +427,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
             // UNKNOWN LID - We need to ask the user.
 
             // First, check if they are ALREADY answering the phone query
-            const session = getSession(remoteJid);
+            const session = await getSession(remoteJid);
             if (session.step === 'AWAITING_PHONE_INPUT') {
                 // Determine if input is a valid phone number
                 let cleanInput = lowerText.replace(/\D/g, '');
@@ -402,7 +459,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
                     );
 
                     await sock.sendMessage(remoteJid, { text: `✅ Numaranız kaydedildi: ${cleanInput}\n\nŞimdi işleminize devam edebilirsiniz. "Randevu" yazarak başlayabilirsiniz.` });
-                    clearSession(remoteJid);
+                    await clearSession(remoteJid);
                     return; // Stop here, let them restart cleanly next msg
                 } else {
                     await sock.sendMessage(remoteJid, { text: `⚠️ Lütfen geçerli bir telefon numarası giriniz (Örn: 05551234567).` });
@@ -411,7 +468,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
             }
 
             // If not answering yet, prompt them
-            setSession(remoteJid, { step: 'AWAITING_PHONE_INPUT' });
+            await setSession(remoteJid, { step: 'AWAITING_PHONE_INPUT' });
             await sock.sendMessage(remoteJid, {
                 text: `⚠️ Numaranız sistemde gizli görünüyor.\n\nİşlem yapabilmek için lütfen **telefon numaranızı** yazar mısınız?\n(Örn: 0532 123 45 67)`
             });
@@ -472,7 +529,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
 
     // PRIORITY 1: GLOBAL RESET COMMANDS (Run before session checks)
-    const session = getSession(remoteJid);
+    const session = await getSession(remoteJid);
     const globalKeywords = ['merhaba', 'selam', 'hi', 'başla', 'menu', 'menü', 'randevu', 'randevum', 'konum', 'bilgi', 'şikayet', 'sikayet', 'öneri'];
 
     // Check if user is trying to run a global command while in an active session
@@ -492,12 +549,12 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
     // Normal global command handling (ONLY if IDLE)
     if (session.step === 'IDLE' && globalKeywords.some(w => lowerText === w || lowerText.startsWith(w + ' '))) {
-        clearSession(remoteJid);
+        await clearSession(remoteJid);
     }
 
     // Cancel command - reset flow anytime
     if (lowerText === 'iptal' || lowerText === 'vazgeç') {
-        clearSession(remoteJid);
+        await clearSession(remoteJid);
         await sock.sendMessage(remoteJid, { text: '❌ İşlem iptal edildi. Yeni bir işlem için "Randevu" yazabilirsiniz.' });
         return;
     }
@@ -509,13 +566,13 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
         if (currentIndex <= 1) {
             // Already at start or AWAITING_BARBER, restart
-            clearSession(remoteJid);
+            await clearSession(remoteJid);
             await sock.sendMessage(remoteJid, { text: '⬅️ Başa döndünüz. Yeni işlem için "Randevu" yazabilirsiniz.' });
             return;
         }
 
         const prevStep = stepOrder[currentIndex - 1];
-        setSession(remoteJid, { step: prevStep });
+        await setSession(remoteJid, { step: prevStep });
 
         // Show appropriate message for previous step
         if (prevStep === 'AWAITING_BARBER') {
@@ -524,7 +581,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
             if (!barbers || barbers.length === 0) {
                 barbers = await getActiveBarbers();
                 // We must update session with this new list so index matches when user selects
-                setSession(remoteJid, { tempBarbers: barbers.map(b => ({ _id: b._id.toString(), name: b.name })) });
+                await setSession(remoteJid, { tempBarbers: barbers.map(b => ({ _id: b._id.toString(), name: b.name })) });
             }
 
             await sock.sendMessage(remoteJid, {
@@ -548,18 +605,18 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 const dateStr = format(d, 'yyyy-MM-dd');
                 if (closedDateSet.has(dateStr)) continue;
                 let dayName;
-                if (i === 0) dayName = 'Bugün';
-                else if (i === 1) dayName = 'Yarın';
-                else {
-                    try {
-                        dayName = trLocale ? format(d, 'dd/MM (EEEE)', { locale: trLocale }) : format(d, 'dd/MM (EEE)');
-                    } catch (e) { dayName = format(d, 'dd/MM'); }
+                try {
+                    dayName = trLocale 
+                        ? format(d, 'd MMMM', { locale: trLocale }) 
+                        : format(d, 'd MMM');
+                } catch (e) { 
+                    dayName = format(d, 'dd/MM'); 
                 }
                 optionCounter++;
-                dateOptions.push({ number: optionCounter, label: `${numToEmoji(optionCounter)} ${dayName} (${dateStr})`, date: dateStr });
+                dateOptions.push({ number: optionCounter, label: `${optionCounter}- ${dayName}`, date: dateStr });
             }
 
-            setSession(remoteJid, { step: prevStep, dateOptions });
+            await setSession(remoteJid, { step: prevStep, dateOptions });
 
             await sock.sendMessage(remoteJid, {
                 text: `⬅️ Tarih seçimine döndünüz.\n\n📅 *Lütfen Bir Tarih Seçiniz:*\n\n${dateOptions.map(opt => opt.label).join('\n')}\n\n👆 Numara yazarak seçim yapabilirsiniz.`
@@ -625,7 +682,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
                     return;
                 }
 
-                setSession(remoteJid, {
+                await setSession(remoteJid, {
                     step: 'AWAITING_DATE',
                     barberId: barberId,
                     barberName: matchedBarber.name
@@ -662,18 +719,12 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
                     // Safely handle locale - if undefined, just show date without day name
                     let dayLabel;
-                    if (i === 0) {
-                        dayLabel = 'Bugün';
-                    } else if (i === 1) {
-                        dayLabel = 'Yarın';
-                    } else {
-                        try {
-                            dayLabel = trLocale
-                                ? format(d, 'd MMMM', { locale: trLocale })
-                                : format(d, 'd MMM');
-                        } catch (localeErr) {
-                            dayLabel = format(d, 'dd/MM');
-                        }
+                    try {
+                        dayLabel = trLocale
+                            ? format(d, 'd MMMM', { locale: trLocale })
+                            : format(d, 'd MMM');
+                    } catch (localeErr) {
+                        dayLabel = format(d, 'dd/MM');
                     }
                     optionCounter++;
                     dateOptions.push({ number: optionCounter, label: `${optionCounter}- ${dayLabel}`, date: dateStr });
@@ -682,7 +733,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 const displayBarberName = matchedBarber.name === 'Admin' ? 'Ramazan' : matchedBarber.name;
 
                 // Store dateOptions in session for later use
-                setSession(remoteJid, {
+                await setSession(remoteJid, {
                     step: 'AWAITING_DATE',
                     barberId,
                     barberName: matchedBarber.name,
@@ -752,12 +803,12 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 return;
             }
 
-            setSession(remoteJid, { step: 'AWAITING_HOUR', date: selectedDate });
+            await setSession(remoteJid, { step: 'AWAITING_HOUR', date: selectedDate });
 
             // Fetch REAL availability from database
             let availableHours = [];
             try {
-                availableHours = await appointmentService.getAvailableSlots(selectedDate, getSession(remoteJid).barberId);
+                availableHours = await appointmentService.getAvailableSlots(selectedDate, (await getSession(remoteJid)).barberId);
             } catch (err) {
                 logger.error('Error fetching slots:', err);
                 availableHours = [];
@@ -765,7 +816,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
             if (availableHours.length === 0) {
                 // Reset step back to AWAITING_DATE so user can pick another date
-                setSession(remoteJid, { step: 'AWAITING_DATE' });
+                await setSession(remoteJid, { step: 'AWAITING_DATE' });
                 await sock.sendMessage(remoteJid, {
                     text: `📅 *${selectedDate}* tarihinde maalesef boş randevu saati kalmamıştır.\n\nLütfen başka bir tarih seçiniz.\n\n⬅️ Geri için "geri" yazın.`
                 });
@@ -816,7 +867,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 return;
             }
 
-            setSession(remoteJid, { step: 'AWAITING_NAME', hour });
+            await setSession(remoteJid, { step: 'AWAITING_NAME', hour });
 
             await sock.sendMessage(remoteJid, {
                 text: `⏰ *${hour}* saati seçildi.\n\n👤 Lütfen *adınızı ve soyadınızı* yazın:\n\n⬅️ Geri için "geri" yazın.`
@@ -832,8 +883,8 @@ const processBotLogic = async (remoteJid, text, msg) => {
     // Step: Waiting for Customer Name
     if (session.step === 'AWAITING_NAME') {
         if (text.length >= 2) {
-            setSession(remoteJid, { step: 'CONFIRMING', customerName: text });
-            const s = getSession(remoteJid);
+            await setSession(remoteJid, { step: 'CONFIRMING', customerName: text });
+            const s = await getSession(remoteJid);
 
             const displayName = s.barberName === 'Admin' ? 'Ramazan' : s.barberName;
             await sock.sendMessage(remoteJid, {
@@ -850,7 +901,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
     // Step: Confirmation
     if (session.step === 'CONFIRMING') {
         if (lowerText === 'evet' || lowerText === 'onay' || lowerText === 'tamam') {
-            const s = getSession(remoteJid);
+            const s = await getSession(remoteJid);
 
             try {
                 // Use the confirmed phone number from session if available (though we didn't store it explicitly in session root, we have it in lookup)
@@ -894,13 +945,13 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 // Notify admin about new appointment
                 await notifyAdmin(`🆕 *Yeni WhatsApp Randevusu!*\n\n👤 Müşteri: ${s.customerName}\n📱 Tel: ${formattedPhone}\n✂️ Berber: ${s.barberName}\n📅 Tarih: ${s.date}\n⏰ Saat: ${s.hour}`);
 
-                clearSession(remoteJid);
+                await clearSession(remoteJid);
             } catch (err) {
                 logger.error('Appointment creation error:', err);
                 await sock.sendMessage(remoteJid, {
                     text: `❌ Randevu oluşturulurken bir hata oluştu: ${err.message}\n\nLütfen tekrar deneyin veya bizi arayın.`
                 });
-                clearSession(remoteJid);
+                await clearSession(remoteJid);
             }
         } else {
             await sock.sendMessage(remoteJid, {
@@ -935,13 +986,13 @@ const processBotLogic = async (remoteJid, text, msg) => {
             await sock.sendMessage(remoteJid, {
                 text: `✅ Mesajınız yetkililere iletilmiştir.\n\nGeri bildiriminiz için teşekkür ederiz. 🙏`
             });
-            clearSession(remoteJid);
+            await clearSession(remoteJid);
         } catch (err) {
             logger.error('Complaint save error:', err);
             await sock.sendMessage(remoteJid, {
                 text: `⚠️ Mesajınız iletilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.`
             });
-            clearSession(remoteJid);
+            await clearSession(remoteJid);
         }
         return;
     }
@@ -955,7 +1006,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
             const selectedAppt = choices[selectionIndex];
             const barberDisplay = selectedAppt.barberName === 'Admin' ? 'Ramazan' : selectedAppt.barberName;
 
-            setSession(remoteJid, {
+            await setSession(remoteJid, {
                 step: 'AWAITING_CANCEL_CONFIRM',
                 cancelAppointmentId: selectedAppt._id
             });
@@ -986,10 +1037,10 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 logger.error('Cancel save error:', err);
                 await sock.sendMessage(remoteJid, { text: '⚠️ İptal işlemi sırasında bir hata oluştu.' });
             }
-            clearSession(remoteJid);
+            await clearSession(remoteJid);
         } else if (lowerText === 'hayır' || lowerText === 'vazgeç' || lowerText === 'iptal') {
             await sock.sendMessage(remoteJid, { text: '👍 İptal işlemi vazgeçildi. Randevunuz korundu.' });
-            clearSession(remoteJid);
+            await clearSession(remoteJid);
         } else {
             await sock.sendMessage(remoteJid, { text: '⚠️ Lütfen *EVET* veya *HAYIR* yazın.' });
         }
@@ -1002,7 +1053,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
     // Greeting Handler
     const greetings = ['merhaba', 'selam', 'hi', 'iyi günler', 'kolay gelsin', 'meraba'];
     if (greetings.some(g => lowerText.includes(g))) {
-        clearSession(remoteJid);
+        await clearSession(remoteJid);
         await sock.sendMessage(remoteJid, {
             text: `Merhaba! 👋 Hoş geldiniz.\n\nSize nasıl yardımcı olabilirim?\n\n📅 *Randevu almak için:* "Randevu" yazın\n📋 *Randevumu sorgula:* "Randevum" yazın\n📍 *Konum bilgisi için:* "Konum" yazın\n❓ *Bilgi için:* "Bilgi" yazın\n📣 *Şikayet/Öneri için:* "Şikayet" yazın`
         });
@@ -1067,7 +1118,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 const appointment = appointments[0];
                 const barberDisplay = appointment.barberName === 'Admin' ? 'Ramazan' : appointment.barberName;
 
-                setSession(remoteJid, {
+                await setSession(remoteJid, {
                     step: 'AWAITING_CANCEL_CONFIRM',
                     cancelAppointmentId: appointment._id.toString()
                 });
@@ -1077,7 +1128,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 });
             } else {
                 // Multiple appointments - Ask for selection
-                setSession(remoteJid, {
+                await setSession(remoteJid, {
                     step: 'AWAITING_CANCEL_SELECTION',
                     tempAppointments: appointments.map(a => ({
                         _id: a._id.toString(),
@@ -1114,7 +1165,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
         // Store the exact list presented to the user to ensure index matches
         // IMPORTANT: Store _id as string to prevent ObjectId serialization issues
-        setSession(remoteJid, {
+        await setSession(remoteJid, {
             step: 'AWAITING_BARBER',
             tempBarbers: barbers.map(b => ({ _id: b._id.toString(), name: b.name }))
         });
@@ -1153,7 +1204,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
     // Complaint Handler
     if (lowerText.includes('şikayet') || lowerText.includes('sikayet') || lowerText.includes('öneri')) {
-        setSession(remoteJid, { step: 'AWAITING_COMPLAINT' });
+        await setSession(remoteJid, { step: 'AWAITING_COMPLAINT' });
         await sock.sendMessage(remoteJid, {
             text: `📣 *Şikayet ve Önerileriniz bizim için değerli.*\n\nLütfen mesajınızı tek bir parça halinde yazınız, yetkililere iletilecektir:`
         });
