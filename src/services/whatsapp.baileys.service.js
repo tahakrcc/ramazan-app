@@ -661,22 +661,22 @@ const processBotLogic = async (remoteJid, text, msg) => {
                     }
 
                     // Safely handle locale - if undefined, just show date without day name
-                    let dayName;
+                    let dayLabel;
                     if (i === 0) {
-                        dayName = 'Bugün';
+                        dayLabel = 'Bugün';
                     } else if (i === 1) {
-                        dayName = 'Yarın';
+                        dayLabel = 'Yarın';
                     } else {
                         try {
-                            dayName = trLocale
-                                ? format(d, 'dd/MM (EEEE)', { locale: trLocale })
-                                : format(d, 'dd/MM (EEE)');
+                            dayLabel = trLocale
+                                ? format(d, 'd MMMM', { locale: trLocale })
+                                : format(d, 'd MMM');
                         } catch (localeErr) {
-                            dayName = format(d, 'dd/MM');
+                            dayLabel = format(d, 'dd/MM');
                         }
                     }
                     optionCounter++;
-                    dateOptions.push({ number: optionCounter, label: `${numToEmoji(optionCounter)} ${dayName} (${dateStr})`, date: dateStr });
+                    dateOptions.push({ number: optionCounter, label: `${optionCounter}- ${dayLabel}`, date: dateStr });
                 }
 
                 const displayBarberName = matchedBarber.name === 'Admin' ? 'Ramazan' : matchedBarber.name;
@@ -718,49 +718,15 @@ const processBotLogic = async (remoteJid, text, msg) => {
 
         const sessionDateOptions = session.dateOptions || [];
 
-        // 1. Check for keywords
-        if (lowerText.includes('bugün')) {
-            selectedDate = todayStr;
-        } else if (lowerText.includes('yarın')) {
-            selectedDate = format(addDays(turkeyNow, 1), 'yyyy-MM-dd');
-        } 
-        // 2. Check for explicit YYYY-MM-DD format
-        else if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(text.trim())) {
-            let inputDate = text.trim();
-            const [y, m, d] = inputDate.split('-').map(Number);
-            const dateObj = new Date(y, m - 1, d);
-            const isValidDate = dateObj.getFullYear() === y &&
-                dateObj.getMonth() === m - 1 &&
-                dateObj.getDate() === d;
-
-            if (isValidDate) {
-                const yearStr = y.toString();
-                const monthStr = m.toString().padStart(2, '0');
-                const dayStr = d.toString().padStart(2, '0');
-                inputDate = `${yearStr}-${monthStr}-${dayStr}`;
-
-                if (inputDate < todayStr) {
-                    await sock.sendMessage(remoteJid, { text: `⚠️ Geçmiş bir tarih seçemezsiniz.\n\nLütfen bugün veya ileri bir tarih seçiniz.` });
-                    return;
-                }
-                if (inputDate > maxDateStr) {
-                    await sock.sendMessage(remoteJid, { text: `⚠️ En fazla ${maxDays} gün sonrasına randevu alabilirsiniz (Max: ${maxDateStr}).` });
-                    return;
-                }
-                selectedDate = inputDate;
-            } else {
-                await sock.sendMessage(remoteJid, { text: `⚠️ *${text.trim()}* geçerli bir tarih değil.` });
-                return;
-            }
-        }
-        // 3. Finally, check for numerical index selection (e.g., "1", "2")
-        else if (!isNaN(parseInt(lowerText))) {
+        // 1. Check ONLY for numerical index selection (e.g., "1", "2")
+        if (!isNaN(parseInt(lowerText))) {
             const numInput = parseInt(lowerText);
             const matchedOption = sessionDateOptions.find(opt => opt.number === numInput);
             if (matchedOption) {
                 selectedDate = matchedOption.date;
             }
         }
+        // Manual date typing and keywords removed per user request
 
         if (selectedDate) {
             // Check if this date is closed
