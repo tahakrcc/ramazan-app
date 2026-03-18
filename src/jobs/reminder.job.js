@@ -8,17 +8,17 @@ const dateUtils = require('../utils/date');
 // Run every 10 minutes to check for upcoming appointments
 cron.schedule('*/10 * * * *', async () => {
     try {
-        const turkeyNow = dateUtils.getTurkeyNow();
+        const now = new Date(); // Use absolute UTC for time comparison
         const todayStr = dateUtils.getTurkeyTodayString();
 
-        // Time windows using Turkey time
+        // Time windows - absolute UTC
         // --- 1 HOUR REMINDER (50-70 mins before appointment) ---
-        const startWindow60 = new Date(turkeyNow.getTime() + 50 * 60000);
-        const endWindow60 = new Date(turkeyNow.getTime() + 70 * 60000);
+        const startWindow60 = new Date(now.getTime() + 50 * 60000);
+        const endWindow60 = new Date(now.getTime() + 70 * 60000);
 
         // --- 30 MINUTE REMINDER (20-40 mins before appointment) ---
-        const startWindow30 = new Date(turkeyNow.getTime() + 20 * 60000);
-        const endWindow30 = new Date(turkeyNow.getTime() + 40 * 60000);
+        const startWindow30 = new Date(now.getTime() + 20 * 60000);
+        const endWindow30 = new Date(now.getTime() + 40 * 60000);
 
         // Find today's confirmed appointments that need reminding
         const appointments = await Appointment.find({
@@ -31,10 +31,10 @@ cron.schedule('*/10 * * * *', async () => {
         });
 
         for (const apt of appointments) {
-            // Parse appointment time as Turkey time (same timezone as turkeyNow)
-            // We create the Date using the ISO string with the offset applied
-            const aptDateTime = new Date(`${apt.date}T${apt.hour}:00.000Z`);
-            // aptDateTime is now in "fake UTC" — same frame as turkeyNow
+            // Parse appointment time explicitly as Turkey Time (UTC+3)
+            // This ensures aptDateTime.getTime() returns the TRUE UTC timestamp.
+            const aptDateTime = new Date(`${apt.date}T${apt.hour}:00.000+03:00`);
+            // aptDateTime is now a proper UTC Date object representing the Turkish slot.
 
             // 1. Check 60 Minute Window
             if (apt.reminderSent60 !== true) {
