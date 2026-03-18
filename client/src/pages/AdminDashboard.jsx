@@ -246,40 +246,41 @@ const DashboardOverview = ({ setActiveTab }) => {
                 // Stats
                 const todayAppts = all.filter(a => {
                     const apptDate = new Date(a.date);
-                    return apptDate >= today && apptDate < tomorrow && a.status !== 'cancelled';
+                    return apptDate >= today && apptDate < tomorrow && a.status !== 'cancelled' && a.customerName !== 'KAPALI';
                 });
                 const tomorrowAppts = all.filter(a => {
                     const apptDate = new Date(a.date);
-                    return apptDate >= tomorrow && apptDate < dayAfter && a.status !== 'cancelled';
+                    return apptDate >= tomorrow && apptDate < dayAfter && a.status !== 'cancelled' && a.customerName !== 'KAPALI';
                 });
 
                 setStats({
                     todayCount: todayAppts.length,
                     tomorrowCount: tomorrowAppts.length,
-                    weekCount: all.filter(a => a.status !== 'cancelled').length
+                    weekCount: all.filter(a => a.status !== 'cancelled' && a.customerName !== 'KAPALI').length
                 });
 
-                // Upcoming Appointments (today + tomorrow, max 5)
+                // Upcoming Appointments (today onwards, max 10)
                 const upcoming = all
                     .filter(a => {
                         const apptDate = new Date(a.date);
-                        return apptDate >= today && apptDate < dayAfter && a.status !== 'cancelled';
+                        return apptDate >= today && a.status !== 'cancelled' && a.customerName !== 'KAPALI';
                     })
-                    .sort((a, b) => new Date(a.date) - new Date(b.date))
-                    .slice(0, 5);
+                    .sort((a, b) => new Date(a.date + 'T' + a.hour) - new Date(b.date + 'T' + b.hour))
+                    .slice(0, 10);
                 setUpcomingAppointments(upcoming);
 
                 // Recent Activities (last 5 created/cancelled, sorted by updatedAt)
                 const activities = all
+                    .filter(a => a.customerName !== 'KAPALI')
                     .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
                     .slice(0, 5)
                     .map(a => ({
                         id: a._id,
                         type: a.status === 'cancelled' ? 'cancelled' : 'created',
                         name: a.customerName,
-                        phone: a.customerPhone,
+                        phone: a.phone,
                         date: a.date,
-                        time: a.time,
+                        time: a.hour,
                         updatedAt: a.updatedAt || a.createdAt
                     }));
                 setRecentActivities(activities);
@@ -362,7 +363,7 @@ const DashboardOverview = ({ setActiveTab }) => {
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-gold-400 text-sm font-medium">{apt.time}</p>
+                                        <p className="text-gold-400 text-sm font-medium">{apt.hour}</p>
                                         <p className="text-gray-500 text-xs">{formatDate(apt.date)}</p>
                                     </div>
                                 </div>

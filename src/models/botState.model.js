@@ -8,7 +8,18 @@ const botStateSchema = new mongoose.Schema({
     },
     state: {
         type: String,
-        enum: ['IDLE', 'AWAITING_FEEDBACK'],
+        enum: [
+            'IDLE', 
+            'AWAITING_BARBER', 
+            'AWAITING_DATE', 
+            'AWAITING_HOUR', 
+            'AWAITING_NAME', 
+            'CONFIRMING', 
+            'AWAITING_COMPLAINT', 
+            'AWAITING_CANCEL_SELECTION', 
+            'AWAITING_CANCEL_CONFIRM', 
+            'AWAITING_FEEDBACK'
+        ],
         default: 'IDLE'
     },
     context: {

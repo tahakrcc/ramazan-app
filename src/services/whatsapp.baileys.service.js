@@ -257,10 +257,19 @@ const initialize = async (forceFresh = false) => {
         });
 
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
-            // if (type !== 'notify') return; // Commented out to be safer
-            console.log(`[WA] New message received. Type: ${type}`);
+            // console.log(`[WA] New message received. Type: ${type}`);
             for (const msg of messages) {
-                if (!msg.key.fromMe) await handleMessage(msg);
+                try {
+                    // Safety check: ensure msg and essential key properties exist
+                    if (!msg || !msg.key || !msg.key.remoteJid) continue;
+                    
+                    // Skip if fromMe OR if it's not a real message (could be protocol msg)
+                    if (msg.key.fromMe || !msg.message) continue;
+                    
+                    await handleMessage(msg);
+                } catch (err) {
+                    logger.error('Error in message pre-check:', err);
+                }
             }
         });
 
@@ -926,7 +935,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 const formattedPhone = formatPhoneDisplay(phone);
 
                 // Create appointment via service
-                await appointmentService.createAppointment({
+                const appt = await appointmentService.createAppointment({
                     customerName: s.customerName,
                     phone: phone, // Store as raw digits (standard)
                     date: s.date,
@@ -943,7 +952,7 @@ const processBotLogic = async (remoteJid, text, msg) => {
                 });
 
                 // Notify admin about new appointment
-                await notifyAdmin(`🆕 *Yeni WhatsApp Randevusu!*\n\n👤 Müşteri: ${s.customerName}\n📱 Tel: ${formattedPhone}\n✂️ Berber: ${s.barberName}\n📅 Tarih: ${s.date}\n⏰ Saat: ${s.hour}`);
+                await notifyAdmin(`🆕 *Yeni WhatsApp Randevusu!*\n\n🆔 ID: ${appt._id}\n👤 Müşteri: ${s.customerName}\n📱 Tel: ${formattedPhone}\n✂️ Berber: ${s.barberName}\n📅 Tarih: ${s.date}\n⏰ Saat: ${s.hour}`);
 
                 await clearSession(remoteJid);
             } catch (err) {
