@@ -191,16 +191,26 @@ const createAppointment = async (data) => {
  */
 const getMyAppointment = async (phone) => {
     const todayStr = dateUtils.getTurkeyTodayString();
+    const currentHour = dateUtils.getTurkeyHour();
 
     const normalizedPhone = normalizePhoneTR(phone);
 
-    const appointment = await Appointment.findOne({
+    const appointments = await Appointment.find({
         phone: normalizedPhone,
         status: 'confirmed',
         date: { $gte: todayStr }
     }).sort({ date: 1, hour: 1 });
 
-    return appointment;
+    // Filter out past hours if the appointment is today
+    const activeAppointment = appointments.find(app => {
+        if (app.date === todayStr) {
+            const [h] = app.hour.split(':').map(Number);
+            return h > currentHour;
+        }
+        return true;
+    });
+
+    return activeAppointment;
 };
 
 /**
@@ -210,6 +220,19 @@ const cancelAppointment = async (id, phone) => {
     const appointment = await Appointment.findById(id);
     if (!appointment) {
         throw new Error('Randevu bulunamadı.');
+    }
+
+    const todayStr = dateUtils.getTurkeyTodayString();
+    const currentHour = dateUtils.getTurkeyHour();
+
+    if (appointment.date < todayStr) {
+        throw new Error('Geçmiş tarihli randevular iptal edilemez.');
+    }
+    if (appointment.date === todayStr) {
+        const [h] = appointment.hour.split(':').map(Number);
+        if (h <= currentHour) {
+            throw new Error('Saati geçmiş randevular iptal edilemez.');
+        }
     }
 
     // Security Check: If phone is provided (public cancel), it must match
