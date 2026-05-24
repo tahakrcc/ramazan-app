@@ -1,4 +1,5 @@
 const Appointment = require('../models/appointment.model');
+const Admin = require('../models/admin.model');
 const Settings = require('../models/settings.model');
 const ClosedDate = require('../models/closedDate.model');
 const logger = require('../config/logger');
@@ -88,6 +89,16 @@ const getAvailableSlots = async (date, barberId) => {
  * Create a new appointment
  */
 const createAppointment = async (data) => {
+    // SECURITY FIX: Prevent 'null' barberId to ensure MongoDB Unique Index works perfectly
+    // If no barber is selected (e.g. from older web UI or 'Any' option), assign the first available barber
+    if (!data.barberId) {
+        const defaultAdmin = await Admin.findOne({ isActive: true }) || await Admin.findOne();
+        if (defaultAdmin) {
+            data.barberId = defaultAdmin._id;
+            data.barberName = data.barberName || defaultAdmin.name || defaultAdmin.username;
+        }
+    }
+
     const todayStr = dateUtils.getTurkeyTodayString();
     const currentHour = dateUtils.getTurkeyHour();
 
