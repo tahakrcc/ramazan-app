@@ -1,4 +1,5 @@
 const verificationService = require('../services/verification.service');
+const { normalizePhoneTR } = require('../utils/phone');
 
 const sendOTP = async (req, res, next) => {
     try {
@@ -7,8 +8,8 @@ const sendOTP = async (req, res, next) => {
             return res.status(400).json({ error: 'Telefon numarası gereklidir.' });
         }
 
-        // Clean phone number
-        const cleanPhone = phone.replace(/\D/g, '');
+        // Normalize phone number to standard format (905XXXXXXXXX)
+        const cleanPhone = normalizePhoneTR(phone);
         if (cleanPhone.length < 10) {
             return res.status(400).json({ error: 'Geçersiz telefon numarası.' });
         }
@@ -27,7 +28,7 @@ const verifyOTP = async (req, res, next) => {
             return res.status(400).json({ error: 'Telefon numarası ve kod gereklidir.' });
         }
 
-        const cleanPhone = phone.replace(/\D/g, '');
+        const cleanPhone = normalizePhoneTR(phone);
         const isValid = await verificationService.verifyOTP(cleanPhone, code);
 
         if (!isValid) {

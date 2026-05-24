@@ -3,6 +3,7 @@ const Settings = require('../models/settings.model');
 const ClosedDate = require('../models/closedDate.model');
 const logger = require('../config/logger');
 const dateUtils = require('../utils/date');
+const { normalizePhoneTR } = require('../utils/phone');
 
 // Helper to get business hours (cached or fresh)
 const getBusinessHours = async () => {
@@ -142,7 +143,7 @@ const createAppointment = async (data) => {
     try {
         const appointment = new Appointment({
             customerName: data.customerName,
-            phone: data.phone,
+            phone: normalizePhoneTR(data.phone),
             date: data.date,
             hour: data.hour,
             service: data.service || 'sac',
@@ -180,8 +181,10 @@ const createAppointment = async (data) => {
 const getMyAppointment = async (phone) => {
     const todayStr = dateUtils.getTurkeyTodayString();
 
+    const normalizedPhone = normalizePhoneTR(phone);
+
     const appointment = await Appointment.findOne({
-        phone: phone,
+        phone: normalizedPhone,
         status: 'confirmed',
         date: { $gte: todayStr }
     }).sort({ date: 1, hour: 1 });
@@ -199,7 +202,8 @@ const cancelAppointment = async (id, phone) => {
     }
 
     // Security Check: If phone is provided (public cancel), it must match
-    if (phone && appointment.phone !== phone) {
+    const normalizedPhone = phone ? normalizePhoneTR(phone) : null;
+    if (normalizedPhone && normalizePhoneTR(appointment.phone) !== normalizedPhone) {
         throw new Error('Bu randevuyu iptal etme yetkiniz bulunmamaktadır.');
     }
 

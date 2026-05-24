@@ -17,7 +17,7 @@ const CONFIG = {
         city: 'Malatya',
         mapsLink: 'https://www.google.com/maps?q=38.351147,38.285103'
     },
-    whatsapp: '905307662779'
+    whatsapp: '905306978233'
 };
 
 const BookingPage = () => {

@@ -1,5 +1,6 @@
 const appointmentService = require('../services/appointment.service');
 const Joi = require('joi');
+const { normalizePhoneTR } = require('../utils/phone');
 
 // Joi Schema for Validation - Updated with service field
 // Joi Schema for Validation - Updated with service field
@@ -14,9 +15,10 @@ const createSchema = Joi.object({
     hour: Joi.string().pattern(/^\d{2}:00$/).required().messages({
         'string.pattern.base': 'Saat formatı: HH:00 olmalı'
     }),
-    service: Joi.string().required(), // Dynamic service ID validation would be better but string is enough for now
-    barberId: Joi.string().allow('', null), // Optional Barber ID
-    barberName: Joi.string().allow('', null) // Optional Barber Name
+    service: Joi.string().required(),
+    barberId: Joi.string().allow('', null),
+    barberName: Joi.string().allow('', null),
+    createdFrom: Joi.string().valid('web', 'whatsapp', 'admin').default('web')
 });
 
 const getServices = async (req, res, next) => {
@@ -93,7 +95,10 @@ const create = async (req, res, next) => {
             return res.status(400).json({ error: error.details[0].message });
         }
 
-        // 2. Call Service
+        // 2. Normalize phone number to consistent format (905XXXXXXXXX)
+        value.phone = normalizePhoneTR(value.phone);
+
+        // 3. OTP Verification — always verify for web requests
         if (value.createdFrom === 'web') {
             const verificationService = require('../services/verification.service');
             const isVerified = await verificationService.isVerified(value.phone);
@@ -102,9 +107,10 @@ const create = async (req, res, next) => {
             }
         }
 
+        // 4. Create Appointment
         const appointment = await appointmentService.createAppointment({
             ...value,
-            createdFrom: value.createdFrom || 'web'
+            createdFrom: value.createdFrom
         });
 
         res.status(201).json(appointment);
@@ -123,8 +129,8 @@ const getMy = async (req, res, next) => {
             return res.status(400).json({ error: 'Phone parameter is required' });
         }
 
-        // Sanitize phone - only digits
-        const sanitizedPhone = phone.replace(/\D/g, '');
+        // Normalize phone to standard format
+        const sanitizedPhone = normalizePhoneTR(phone);
 
         const appointment = await appointmentService.getMyAppointment(sanitizedPhone);
         if (!appointment) {
@@ -150,8 +156,8 @@ const cancel = async (req, res, next) => {
             return res.status(400).json({ error: 'Geçersiz randevu ID' });
         }
 
-        // Sanitize phone
-        const sanitizedPhone = phone.replace(/\D/g, '');
+        // Normalize phone to standard format
+        const sanitizedPhone = normalizePhoneTR(phone);
 
         await appointmentService.cancelAppointment(id, sanitizedPhone);
         res.json({ message: 'Randevu başarıyla iptal edildi.' });

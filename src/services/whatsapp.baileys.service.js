@@ -350,7 +350,7 @@ const getSession = async (jid) => {
 
         // Check timeout
         if (Date.now() - state.updatedAt.getTime() > SESSION_TIMEOUT) {
-            await BotState.findOneAndUpdate({ phone: jid }, { $unset: { "data.bookingFlow": 1 } });
+            await BotState.findOneAndUpdate({ phone: sjid }, { $unset: { "data.bookingFlow": 1 } });
             return { step: 'IDLE' };
         }
         return state.data.bookingFlow;
@@ -393,9 +393,6 @@ const processBotLogic = async (remoteJid, text, msg) => {
     const lowerText = normalizeText(text);
 
     // --- SMART PHONE EXTRACTION (Fix for LID/Wrong Numbers) ---
-    // 1. Try to get phone from participant if available
-    // 2. If it's still a long ID (LID/UUID), check if we have a saved mapping in BotState.
-    // 3. If NO mapping, STOP and ask user for real phone.
 
     // FIX: Split by ':' to remove Device AD (Agent Device) ID. 
     // Example: 123456789:1@s.whatsapp.net -> 123456789
@@ -404,17 +401,20 @@ const processBotLogic = async (remoteJid, text, msg) => {
     // Check if JID is a LID (Linked Identity)
     const isLid = remoteJid.includes('@lid');
 
-    // STRICT LID HANDLING:
-    // We strictly use the LID from the JID as the key for database lookup.
-    // We do NOT attempt to extract phone from 'participant' anymore because it is unreliable 
-    // and causes "key mismatch" (sometimes looking up LID, sometimes Phone) in the 'data.lids' array.
-
-
     let phone = rawPhone;
+    let participantPhone = null;
 
-    // CHECK FOR LID OR LONG ID
-    // Logic: If it is a LID (any length) OR it looks like a long ID (>12 digits)
-    if (isLid || phone.length >= 13) {
+    // Attempt to extract real phone from participant if available (fixes "gizli numara" issue automatically)
+    const msgParticipant = msg.key.participant || msg.participant;
+    if (msgParticipant && msgParticipant.includes('@s.whatsapp.net')) {
+        participantPhone = msgParticipant.split('@')[0].split(':')[0];
+        phone = participantPhone;
+    }
+
+    // CHECK FOR LID
+    // Only ask for number if it is a LID AND we couldn't extract a real phone from participant.
+    // Removed phone.length >= 13 check to allow valid international/long numbers.
+    if (isLid && !participantPhone) {
 
         // Check if we already know this user's real phone
         // Search in both single 'lid' field and 'lids' array using REGEX to match "12345" against "12345:1"

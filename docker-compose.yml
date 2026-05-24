@@ -8,7 +8,7 @@ services:
       - "5000:5000"
     environment:
       - PORT=5000
-      - MONGO_URI=mongodb+srv://ramazan:ramazan123@cluster0.mongodb.net/ramazan-app
+      - MONGO_URI=${MONGO_URI:-mongodb://localhost:27017/ramazan-app}
       - NODE_ENV=production
     volumes:
       - ./.wwebjs_auth:/app/.wwebjs_auth

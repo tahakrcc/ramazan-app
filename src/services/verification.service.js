@@ -58,6 +58,12 @@ const verifyOTP = async (phone, code) => {
             return false;
         }
 
+        // Check if OTP has expired (10 minutes)
+        const TEN_MINUTES = 10 * 60 * 1000;
+        if (Date.now() - verification.createdAt.getTime() > TEN_MINUTES) {
+            return false;
+        }
+
         verification.verified = true;
         await verification.save();
         
@@ -75,7 +81,14 @@ const verifyOTP = async (phone, code) => {
  * @returns {Promise<boolean>}
  */
 const isVerified = async (phone) => {
-    const verification = await Verification.findOne({ phone, verified: true });
+    // Only accept verifications from the last 30 minutes
+    const THIRTY_MINUTES = 30 * 60 * 1000;
+    const cutoff = new Date(Date.now() - THIRTY_MINUTES);
+    const verification = await Verification.findOne({ 
+        phone, 
+        verified: true,
+        createdAt: { $gte: cutoff }
+    });
     return !!verification;
 };
 

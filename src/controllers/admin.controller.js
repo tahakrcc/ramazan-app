@@ -1,7 +1,7 @@
 const Admin = require('../models/admin.model');
 const Appointment = require('../models/appointment.model');
 const appointmentService = require('../services/appointment.service'); // Added import
-const broadcastService = require('../services/broadcast.service'); // Added import
+// const broadcastService = require('../services/broadcast.service'); // Unused — broadcast logic is in sendBroadcast below
 const whatsappService = require('../services/whatsapp.service'); // Added import
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
@@ -137,10 +137,52 @@ const updateAppointment = async (req, res, next) => {
         const { id } = req.params;
         const updates = req.body;
 
-        const appointment = await Appointment.findByIdAndUpdate(id, updates, { new: true });
+        // Whitelist allowed fields to prevent mass assignment
+        const allowedFields = ['customerName', 'phone', 'date', 'hour', 'service', 'notes', 'barberId', 'barberName', 'status'];
+        const filteredUpdates = {};
+        for (const key of allowedFields) {
+            if (updates[key] !== undefined) {
+                filteredUpdates[key] = updates[key];
+            }
+        }
+
+        // If date or hour is changing, check for conflicts
+        if (filteredUpdates.date || filteredUpdates.hour) {
+            const existing = await Appointment.findById(id);
+            if (!existing) {
+                return res.status(404).json({ error: 'Randevu bulunamadn.' });
+            }
+
+            const checkDate = filteredUpdates.date || existing.date;
+            const checkHour = filteredUpdates.hour || existing.hour;
+            const checkBarberId = filteredUpdates.barberId !== undefined ? filteredUpdates.barberId : existing.barberId;
+
+            // Only check conflicts if the status will be 'confirmed'
+            const newStatus = filteredUpdates.status || existing.status;
+            if (newStatus === 'confirmed') {
+                const conflict = await Appointment.findOne({
+                    _id: { $ne: id },
+                    date: checkDate,
+                    hour: checkHour,
+                    barberId: checkBarberId,
+                    status: 'confirmed'
+                });
+                if (conflict) {
+                    return res.status(409).json({ error: 'Bu saat dolu. Lütfen başka bir saat seçin.' });
+                }
+            }
+        }
+
+        const appointment = await Appointment.findByIdAndUpdate(id, filteredUpdates, { new: true });
+        if (!appointment) {
+            return res.status(404).json({ error: 'Randevu bulunamadı.' });
+        }
         logger.info(`Admin updated appointment: ${id}`);
         res.json(appointment);
     } catch (error) {
+        if (error.code === 11000) {
+            return res.status(409).json({ error: 'Bu saat dolu.' });
+        }
         next(error);
     }
 }
