@@ -193,6 +193,11 @@ const initialize = async (forceFresh = false) => {
             auth: state,
             syncFullHistory: false,
             generateHighQualityLinkPreview: false,
+            markOnlineOnConnect: false,
+            browser: ['Windows', 'Chrome', '110.0.5481.192'],
+            getMessage: async (key) => {
+                return { conversation: 'mesaj bekleniyor...' };
+            },
             logger: require('pino')({ level: 'silent' }),
         });
 
@@ -397,6 +402,17 @@ const processBotLogic = async (remoteJid, text, msg) => {
     // FIX: Split by ':' to remove Device AD (Agent Device) ID. 
     // Example: 123456789:1@s.whatsapp.net -> 123456789
     let rawPhone = remoteJid.split('@')[0].split(':')[0];
+
+    // --- NUMARA SIFIRLAMA KOMUTU ---
+    if (lowerText === 'numaramı değiştir' || lowerText === 'numara değiştir' || lowerText === 'numara sıfırla') {
+        await BotState.updateMany(
+            { $or: [{ 'data.lid': rawPhone }, { 'data.lids': rawPhone }] },
+            { $pull: { 'data.lids': rawPhone }, $unset: { 'data.lid': 1 } }
+        );
+        await clearSession(remoteJid);
+        await sock.sendMessage(remoteJid, { text: '🔄 Numara kaydınız başarıyla sıfırlandı!\n\nYeni numaranızı girmek için lütfen sisteme herhangi bir mesaj (Örn: "Randevu") gönderin.' });
+        return;
+    }
 
     // Check if JID is a LID (Linked Identity)
     const isLid = remoteJid.includes('@lid');
