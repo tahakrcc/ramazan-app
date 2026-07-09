@@ -73,7 +73,7 @@ const PWAPrompt = () => {
             }
 
             // Subscribe
-            const publicVapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+            const publicVapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY || "BDUc4NvQHylLwXz71bZ8-fJnKnnZmzVE24xVyVPETp1DbnqYab0OgLCX5Qx8kQTApJTiozS0amt_dASHyIEl9t0";
             const convertedVapidKey = urlBase64ToUint8Array(publicVapidKey);
 
             const subscription = await registration.pushManager.subscribe({
