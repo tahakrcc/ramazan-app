@@ -1,11 +1,18 @@
 const Subscription = require('../models/subscription.model');
 const webpush = require('web-push');
 
-webpush.setVapidDetails(
-    process.env.VAPID_EMAIL || 'mailto:test@test.com',
-    process.env.VAPID_PUBLIC_KEY,
-    process.env.VAPID_PRIVATE_KEY
-);
+const publicKey = process.env.VAPID_PUBLIC_KEY || process.env.VITE_VAPID_PUBLIC_KEY;
+const privateKey = process.env.VAPID_PRIVATE_KEY;
+
+if (publicKey && privateKey) {
+    webpush.setVapidDetails(
+        process.env.VAPID_EMAIL || 'mailto:admin@byramazan.com',
+        publicKey,
+        privateKey
+    );
+} else {
+    console.warn('VAPID keys are missing. Push notifications are disabled.');
+}
 
 exports.subscribe = async (req, res, next) => {
     try {
