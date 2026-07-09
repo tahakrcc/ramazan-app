@@ -1,4 +1,3 @@
-const whatsappService = require('./whatsapp.service');
 const Appointment = require('../models/appointment.model');
 const logger = require('../config/logger');
 
@@ -34,13 +33,17 @@ const sendBroadcast = async (message, filter = 'all') => {
 
     for (const phone of phones) {
         try {
-            // ULTRA SAFE MODE: 10-25 seconds random delay
-            // This mimics real human behavior (~3-4 messages per minute)
-            const delay = Math.floor(Math.random() * 15000) + 10000;
+            // Minor delay for Push Notifications
+            const delay = 100;
             await sleep(delay);
 
-            await whatsappService.sendMessage(phone, message);
-            successCount++;
+            const notificationController = require('../controllers/notification.controller');
+            const sent = await notificationController.sendNotificationToPhone(phone, { title: 'Duyuru', body: message });
+            if (sent) {
+                successCount++;
+            } else {
+                failCount++;
+            }
         } catch (error) {
             logger.error(`Failed to send broadcast to ${phone}`, error);
             failCount++;

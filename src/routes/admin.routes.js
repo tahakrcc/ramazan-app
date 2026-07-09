@@ -260,39 +260,7 @@ router.put('/settings', protect, restrictTo('ADMIN'), async (req, res, next) => 
 // =============== BROADCAST ===============
 router.post('/broadcast', protect, adminController.sendBroadcast);
 
-// =============== WHATSAPP ===============
-const whatsappService = require('../services/whatsapp.service');
-
-router.get('/whatsapp/status', protect, async (req, res, next) => {
-    try {
-        const status = await whatsappService.getStatus();
-        res.json(status);
-    } catch (error) {
-        next(error);
-    }
-});
-
-router.post('/whatsapp/logout', protect, async (req, res, next) => {
-    try {
-        await whatsappService.logout();
-        res.json({ message: 'WhatsApp bağlantısı kesildi.' });
-    } catch (error) {
-        next(error);
-    }
-});
-
-// Force reset WhatsApp session (clears database auth)
-router.post('/whatsapp/reset', protect, async (req, res, next) => {
-    try {
-        const mongoose = require('mongoose');
-        // Clear auth states from MongoDB
-        await mongoose.connection.db.collection('authstates').deleteMany({});
-        logger.info('WhatsApp session force reset by admin');
-        res.json({ success: true, message: 'WhatsApp oturumu sıfırlandı. Sayfa yenilenince yeni QR kod gelecek.' });
-    } catch (error) {
-        next(error);
-    }
-});
+// =============== WHATSAPP REMOVED ===============
 
 // =============== STAFF MANAGEMENT ===============
 const AdminUser = require('../models/admin.model'); // Admin model is effectively User model

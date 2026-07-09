@@ -358,17 +358,70 @@ const BookingFlow = ({ onBack, services, settings }) => {
     const [formData, setFormData] = useState({ name: '', phone: '', secondName: '', secondPhone: '' });
     const [showSecondPerson, setShowSecondPerson] = useState(false);
     const [barbers, setBarbers] = useState([]);
-    
-    // OTP States
-    const [verificationSent, setVerificationSent] = useState(false);
-    const [otpCode, setOtpCode] = useState('');
-    const [isVerifying, setIsVerifying] = useState(false);
-    const [isSendingCode, setIsSendingCode] = useState(false);
+    const [savedProfiles, setSavedProfiles] = useState([]);
 
     useEffect(() => {
+        // Load remembered user(s)
+        let profiles = [];
+        
+        // Migrate old format to new array format if exists
+        const oldName = localStorage.getItem('byramazan_name');
+        const oldPhone = localStorage.getItem('byramazan_phone');
+        if (oldName && oldPhone) {
+            profiles.push({ name: oldName, phone: oldPhone });
+            localStorage.removeItem('byramazan_name');
+            localStorage.removeItem('byramazan_phone');
+            localStorage.setItem('byramazan_profiles', JSON.stringify(profiles));
+        } else {
+            const saved = localStorage.getItem('byramazan_profiles');
+            if (saved) {
+                try {
+                    profiles = JSON.parse(saved);
+                } catch (e) {
+                    profiles = [];
+                }
+            }
+        }
+        
+        setSavedProfiles(profiles);
+        
+        // Auto-fill the first profile if exists
+        if (profiles.length > 0) {
+            setFormData(prev => ({ ...prev, name: profiles[0].name, phone: profiles[0].phone }));
+        }
+        
         // Fetch barbers
         API.get('/appointments/barbers').then(res => setBarbers(res.data)).catch(err => console.error(err));
     }, []);
+
+    const handlePhoneChange = (val, field) => {
+        // Sadece rakamları al
+        let cleaned = val.replace(/\D/g, '');
+        // Eğer 0 ile başlıyorsa 0'ı at
+        if (cleaned.startsWith('0')) {
+            cleaned = cleaned.substring(1);
+        }
+        // Maksimum 10 haneye izin ver
+        cleaned = cleaned.substring(0, 10);
+        
+        setFormData({ ...formData, [field]: cleaned });
+    };
+
+    const clearSavedData = () => {
+        setFormData(prev => ({ ...prev, name: '', phone: '' }));
+        toast.info('Yeni kişi bilgilerini girebilirsiniz.', { autoClose: 2000 });
+    };
+
+    const deleteProfile = (e, phoneToRemove) => {
+        e.stopPropagation();
+        const updated = savedProfiles.filter(p => p.phone !== phoneToRemove);
+        setSavedProfiles(updated);
+        localStorage.setItem('byramazan_profiles', JSON.stringify(updated));
+        if (formData.phone === phoneToRemove) {
+            setFormData(prev => ({ ...prev, name: '', phone: '' }));
+        }
+        toast.info('Kişi silindi.');
+    };
 
     // Fetch Slots logic - Updated to include barberId
     useEffect(() => {
@@ -437,54 +490,23 @@ const BookingFlow = ({ onBack, services, settings }) => {
         }
     };
 
-    const handleSendOTP = async () => {
-        if (!formData.phone || formData.phone.length < 10) {
-            toast.error('Lütfen geçerli bir telefon numarası giriniz.');
-            return;
-        }
-        setIsSendingCode(true);
-        try {
-            await API.post('/verify/send-code', { phone: formData.phone });
-            setVerificationSent(true);
-            toast.success('Doğrulama kodu WhatsApp ile gönderildi.');
-        } catch (error) {
-            toast.error(error.response?.data?.error || 'Kod gönderilemedi.');
-        } finally {
-            setIsSendingCode(false);
-        }
-    };
-
-    const handleVerifyOTP = async () => {
-        if (!otpCode || otpCode.length !== 6) {
-            toast.error('Lütfen 6 haneli kodu giriniz.');
-            return;
-        }
-        setIsVerifying(true);
-        try {
-            await API.post('/verify/check-code', { phone: formData.phone, code: otpCode });
-            toast.success('Telefon doğrulandı!');
-            // Proceed to final booking
-            await finalizeBooking();
-        } catch (error) {
-            toast.error(error.response?.data?.error || 'Geçersiz kod.');
-        } finally {
-            setIsVerifying(false);
-        }
-    };
-
     const submitBooking = async (e) => {
         e.preventDefault();
-        
-        // If already verified, just finalize
-        // But usually we want to trigger OTP if not verified
-        if (!verificationSent) {
-            await handleSendOTP();
-        } else {
-            await handleVerifyOTP();
-        }
+        await finalizeBooking();
     };
 
     const finalizeBooking = async () => {
+        // Validate Phone Length
+        if (formData.phone.length !== 10) {
+            toast.error('Lütfen telefon numarasını eksiksiz 10 hane olarak giriniz (Başına 0 koymadan).');
+            return;
+        }
+
+        if (isDoubleBooking && formData.secondPhone && formData.secondPhone.length !== 10) {
+            toast.error('Lütfen 2. kişinin telefon numarasını eksiksiz 10 hane olarak giriniz.');
+            return;
+        }
+
         // Confirmation Dialog
         if (!window.confirm('Randevuyu onaylıyor musunuz?')) return;
 
@@ -508,8 +530,20 @@ const BookingFlow = ({ onBack, services, settings }) => {
                 barberName: selection.barber?.name // Add Name
             };
 
+            // Load existing profiles
+            const existingProfilesStr = localStorage.getItem('byramazan_profiles');
+            const existingProfiles = existingProfilesStr ? JSON.parse(existingProfilesStr) : [];
+
             // Create First Appointment
             await API.post('/appointments', payload);
+            
+            // Save primary user profile
+            const newProfile = { name: formData.name, phone: formData.phone };
+            if (!existingProfiles.some(p => p.phone === newProfile.phone)) {
+                existingProfiles.push(newProfile);
+                localStorage.setItem('byramazan_profiles', JSON.stringify(existingProfiles));
+                setSavedProfiles([...existingProfiles]); // Clone to trigger re-render
+            }
 
             // Create Second Appointment
             if (isDoubleBooking) {
@@ -519,6 +553,15 @@ const BookingFlow = ({ onBack, services, settings }) => {
                     phone: formData.secondPhone || formData.phone,
                     hour: sortedSlots[1],
                 });
+
+                if (formData.secondName && formData.secondPhone) {
+                    const secondProfile = { name: formData.secondName, phone: formData.secondPhone };
+                    if (!existingProfiles.some(p => p.phone === secondProfile.phone)) {
+                        existingProfiles.push(secondProfile);
+                        localStorage.setItem('byramazan_profiles', JSON.stringify(existingProfiles));
+                        setSavedProfiles([...existingProfiles]);
+                    }
+                }
             }
 
             setBookingStep(4);
@@ -774,10 +817,49 @@ const BookingFlow = ({ onBack, services, settings }) => {
 
                                 {/* 1. Person */}
                                 <div className="space-y-4">
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <div className="w-6 h-6 rounded-full bg-gold-500 text-dark-950 flex items-center justify-center font-bold text-xs">1</div>
-                                        <h3 className="text-white font-serif text-lg">Hizmet Alan Kişi</h3>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-6 h-6 rounded-full bg-gold-500 text-dark-950 flex items-center justify-center font-bold text-xs">1</div>
+                                            <h3 className="text-white font-serif text-lg">Hizmet Alan Kişi</h3>
+                                        </div>
+                                        {savedProfiles.length > 0 && (
+                                            <button 
+                                                type="button" 
+                                                onClick={clearSavedData}
+                                                className="text-[10px] uppercase tracking-widest text-gold-500 hover:text-white border border-gold-500/30 bg-gold-500/10 px-2 py-1 rounded-sm transition-colors"
+                                            >
+                                                + Yeni Kişi Ekle
+                                            </button>
+                                        )}
                                     </div>
+
+                                    {/* Saved Profiles Cards */}
+                                    {savedProfiles.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 mb-2">
+                                            {savedProfiles.map((profile, idx) => (
+                                                <div 
+                                                    key={idx}
+                                                    onClick={() => setFormData(prev => ({ ...prev, name: profile.name, phone: profile.phone }))}
+                                                    className={`relative group cursor-pointer px-3 py-2 rounded-sm border transition-all flex items-center gap-2 ${
+                                                        formData.phone === profile.phone 
+                                                        ? 'bg-gold-500/20 border-gold-500 text-gold-500' 
+                                                        : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:border-gold-500/50'
+                                                    }`}
+                                                >
+                                                    <div className="flex flex-col">
+                                                        <span className="text-xs font-bold uppercase tracking-wider">{profile.name}</span>
+                                                        <span className="text-[10px] tracking-widest opacity-80">{profile.phone}</span>
+                                                    </div>
+                                                    <button 
+                                                        onClick={(e) => deleteProfile(e, profile.phone)}
+                                                        className="ml-2 text-gray-500 hover:text-red-400 transition-colors"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
 
                                     <div className="space-y-2">
                                         <label className="text-xs uppercase tracking-widest text-gold-500 font-bold ml-1">Ad Soyad</label>
@@ -796,36 +878,14 @@ const BookingFlow = ({ onBack, services, settings }) => {
                                             type="tel"
                                             required
                                             value={formData.phone}
-                                            onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                                            className="w-full bg-white/5 border-b-2 border-white/10 py-3 md:py-4 px-4 text-lg md:text-xl text-white focus:outline-none focus:border-gold-500 focus:bg-white/10 transition-all rounded-t-sm"
-                                            placeholder="05XX XXX XX XX"
+                                            onChange={e => handlePhoneChange(e.target.value, 'phone')}
+                                            className="w-full bg-white/5 border-b-2 border-white/10 py-3 md:py-4 px-4 text-lg md:text-xl text-white focus:outline-none focus:border-gold-500 focus:bg-white/10 transition-all rounded-t-sm tracking-widest"
+                                            placeholder="5XX XXX XX XX"
                                         />
                                     </div>
                                 </div>
 
-                                {/* OTP Section */}
-                                <AnimatePresence>
-                                    {verificationSent && (
-                                        <motion.div
-                                            initial={{ height: 0, opacity: 0 }}
-                                            animate={{ height: 'auto', opacity: 1 }}
-                                            className="space-y-4 pt-6 border-t border-gold-500/20"
-                                        >
-                                            <div className="space-y-2">
-                                                <label className="text-xs uppercase tracking-widest text-gold-500 font-bold ml-1">Doğrulama Kodu (WhatsApp)</label>
-                                                <input
-                                                    type="text"
-                                                    value={otpCode}
-                                                    onChange={e => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                                                    className="w-full bg-white/10 border-b-2 border-gold-500 py-4 px-4 text-3xl tracking-[0.3em] font-mono text-center text-gold-500 focus:outline-none focus:bg-white/20 transition-all rounded-t-sm"
-                                                    placeholder="000000"
-                                                    maxLength={6}
-                                                />
-                                                <p className="text-[10px] text-gray-500 text-center uppercase tracking-widest">WhatsApp'ınıza gelen 6 haneli kodu giriniz.</p>
-                                            </div>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
+                                {/* OTP Section Removed */}
 
                                 {/* 2. Person (Optional) */}
                                 {isDoubleBooking && (
@@ -866,9 +926,9 @@ const BookingFlow = ({ onBack, services, settings }) => {
                                                         <input
                                                             type="tel"
                                                             value={formData.secondPhone}
-                                                            onChange={e => setFormData({ ...formData, secondPhone: e.target.value })}
-                                                            className="w-full bg-white/5 border-b-2 border-white/10 py-3 md:py-4 px-4 text-lg text-white focus:outline-none focus:border-white focus:bg-white/10 transition-all rounded-t-sm"
-                                                            placeholder="05XX XXX XX XX"
+                                                            onChange={e => handlePhoneChange(e.target.value, 'secondPhone')}
+                                                            className="w-full bg-white/5 border-b-2 border-white/10 py-3 md:py-4 px-4 text-lg text-white focus:outline-none focus:border-white focus:bg-white/10 transition-all rounded-t-sm tracking-widest"
+                                                            placeholder="5XX XXX XX XX"
                                                         />
                                                     </div>
                                                 </motion.div>
@@ -880,21 +940,10 @@ const BookingFlow = ({ onBack, services, settings }) => {
                                 <div className="pt-4 md:pt-8 text-center">
                                     <button
                                         type="submit"
-                                        disabled={isSendingCode || isVerifying}
-                                        className={`w-full py-5 md:py-6 rounded-sm uppercase tracking-[0.2em] font-bold text-sm transition-all duration-500 relative overflow-hidden group ${
-                                            verificationSent 
-                                            ? 'bg-gold-500 text-dark-950 hover:shadow-[0_0_30px_rgba(212,175,55,0.4)]' 
-                                            : 'bg-white text-dark-950 hover:bg-gold-500'
-                                        }`}
+                                        className="w-full py-5 md:py-6 rounded-sm uppercase tracking-[0.2em] font-bold text-sm transition-all duration-500 relative overflow-hidden group bg-gold-500 text-dark-950 hover:shadow-[0_0_30px_rgba(212,175,55,0.4)]"
                                     >
                                         <span className="relative z-10">
-                                            {isSendingCode 
-                                                ? 'Kod Gönderiliyor...' 
-                                                : isVerifying 
-                                                    ? 'Doğrulanıyor...' 
-                                                    : verificationSent 
-                                                        ? 'Kodu Doğrula ve Onayla' 
-                                                        : 'Doğrulama Kodu Gönder'}
+                                            Randevuyu Onayla
                                         </span>
                                     </button>
                                 </div>
@@ -981,6 +1030,43 @@ const Footer = () => (
 );
 
 const Nav = () => {
+    const [canInstall, setCanInstall] = useState(false);
+    const [isIOS, setIsIOS] = useState(false);
+
+    useEffect(() => {
+        const checkIOS = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+        setIsIOS(checkIOS);
+
+        const checkInstall = () => {
+            if (window.deferredPrompt) {
+                setCanInstall(true);
+            }
+        };
+
+        if (window.deferredPrompt) {
+            setCanInstall(true);
+        } else if (checkIOS && !isStandalone) {
+            setCanInstall(true); // Always show for iOS if not installed to give manual instructions
+        }
+
+        window.addEventListener('deferredPromptReady', checkInstall);
+        return () => window.removeEventListener('deferredPromptReady', checkInstall);
+    }, []);
+
+    const handleTopInstall = async () => {
+        if (window.deferredPrompt) {
+            window.deferredPrompt.prompt();
+            const { outcome } = await window.deferredPrompt.userChoice;
+            if (outcome === 'accepted') {
+                window.deferredPrompt = null;
+                setCanInstall(false);
+            }
+        } else if (isIOS) {
+            toast.info('Safari menüsünden "Paylaş" ikonuna tıklayıp "Ana Ekrana Ekle"yi seçin.', { autoClose: 5000 });
+        }
+    };
+
     return (
         <nav className="fixed top-0 left-0 right-0 p-6 md:p-8 flex justify-between items-center z-40 bg-gradient-to-b from-dark-950/80 to-transparent backdrop-blur-sm md:bg-none md:backdrop-blur-none transition-all duration-300">
             <div className="z-50 relative flex items-center gap-4">
@@ -989,16 +1075,32 @@ const Nav = () => {
             </div>
 
             {/* Desktop Nav */}
-            <div className="hidden md:flex gap-8 text-xs uppercase tracking-widest text-white mix-blend-difference">
+            <div className="hidden md:flex items-center gap-8 text-xs uppercase tracking-widest text-white mix-blend-difference">
                 <a href="#hizmetler" className="hover:text-gold-500 transition-colors">Hizmetler</a>
                 <a href="#hakkimizda" className="hover:text-gold-500 transition-colors">Hakkımızda</a>
                 <a href="#iletisim" className="hover:text-gold-500 transition-colors">İletişim</a>
+                {canInstall && (
+                    <button 
+                        onClick={handleTopInstall}
+                        className="px-4 py-2 bg-gold-500 text-dark-950 font-bold hover:bg-white transition-colors rounded-sm"
+                    >
+                        Uygulamayı İndir
+                    </button>
+                )}
             </div>
 
             {/* Mobile Nav Actions */}
             <div className="flex md:hidden items-center gap-4 z-50">
+                {canInstall && (
+                    <button 
+                        onClick={handleTopInstall}
+                        className="px-3 py-2 bg-white text-dark-950 text-[10px] font-bold uppercase tracking-widest rounded-sm"
+                    >
+                        Yükle
+                    </button>
+                )}
                 <button
-                    onClick={() => document.querySelector('button[class*="group relative px-10"]').click()}
+                    onClick={() => document.querySelector('button[class*="group relative px-10"]')?.click()}
                     className="px-4 py-2 bg-gold-500 text-dark-950 text-[10px] font-bold uppercase tracking-widest rounded-sm"
                 >
                     Randevu Al

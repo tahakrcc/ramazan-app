@@ -1,8 +1,6 @@
 const Admin = require('../models/admin.model');
 const Appointment = require('../models/appointment.model');
 const appointmentService = require('../services/appointment.service'); // Added import
-// const broadcastService = require('../services/broadcast.service'); // Unused — broadcast logic is in sendBroadcast below
-const whatsappService = require('../services/whatsapp.service'); // Added import
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const logger = require('../config/logger');
@@ -215,16 +213,17 @@ const sendBroadcast = async (req, res, next) => {
 
         logger.info(`Starting broadcast to ${phones.length} recipients. Filter: ${filter}`);
 
+        const notificationController = require('../controllers/notification.controller');
         // Async processing (don't wait for all to finish for response)
         // Batched sending to avoid overload
         (async () => {
             let successCount = 0;
             for (const phone of phones) {
                 try {
-                    await whatsappService.sendMessage(phone, message);
+                    await notificationController.sendNotificationToPhone(phone, { title: 'Duyuru', body: message });
                     successCount++;
                     // Tiny delay to be safe
-                    await new Promise(r => setTimeout(r, 1000));
+                    await new Promise(r => setTimeout(r, 100));
                 } catch (e) {
                     logger.error(`Broadcast fail to ${phone}: ${e.message}`);
                 }
@@ -239,50 +238,10 @@ const sendBroadcast = async (req, res, next) => {
     }
 };
 
-// WhatsApp Yönetimi
-const getWhatsAppStatus = async (req, res) => {
-    try {
-        const status = await whatsappService.getStatus();
-        res.json(status);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-};
-
-const pairWhatsApp = async (req, res) => {
-    try {
-        const { phone } = req.body;
-        if (!phone) {
-            return res.status(400).json({ message: 'Telefon numarası gerekli' });
-        }
-        const code = await whatsappService.requestPairing(phone);
-        res.json({ success: true, code });
-    } catch (error) {
-        console.error('Pairing error:', error);
-        res.status(500).json({ message: 'Eşleştirme kodu alınamadı', error: error.message });
-    }
-};
-
-const disconnectWhatsApp = async (req, res) => {
-    try {
-        const success = await whatsappService.logout();
-        if (success) {
-            res.json({ success: true, message: 'Bağlantı kesildi' });
-        } else {
-            res.status(500).json({ success: false, message: 'Bağlantı kesilemedi' });
-        }
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-};
-
 module.exports = {
     login,
     getAppointments,
     createAppointment,
     updateAppointment,
-    sendBroadcast,
-    getWhatsAppStatus,
-    pairWhatsApp,
-    disconnectWhatsApp
+    sendBroadcast
 };

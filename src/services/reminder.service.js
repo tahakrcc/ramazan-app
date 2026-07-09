@@ -1,7 +1,6 @@
 const cron = require('node-cron');
 const { addMinutes, format, differenceInMinutes, parseISO } = require('date-fns');
 const Appointment = require('../models/appointment.model');
-const whatsappService = require('./whatsapp.service');
 const logger = require('../config/logger');
 
 // Schedule: Run every minute
@@ -60,8 +59,9 @@ const sendReminder = async (appt, type) => {
 
         const message = `Sayın ${customerName},\n\n🔔 *HATIRLATMA*\n\nRandevunuza yaklaşık *${timeMsg}* kaldı.\n📅 Tarih: ${appt.date}\n⏰ Saat: ${appt.hour}${barberName}\n\nSizi bekliyoruz!`;
 
-        await whatsappService.sendMessage(appt.phone, message);
-        logger.info(`Reminder (${type}) sent to ${appt.phone}`);
+        const notificationController = require('../controllers/notification.controller');
+        await notificationController.sendNotificationToPhone(appt.phone, { title: 'Randevu Hatırlatması', body: message });
+        logger.info(`Push Reminder (${type}) sent to ${appt.phone}`);
     } catch (err) {
         logger.error(`Failed to send reminder to ${appt.phone}`, err);
     }

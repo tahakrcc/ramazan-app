@@ -167,14 +167,14 @@ const createAppointment = async (data) => {
         const savedAppointment = await appointment.save();
         logger.info(`Appointment created: ${savedAppointment._id} for ${data.phone} (Barber: ${data.barberName})`);
 
-        // Send WhatsApp Notification (Async)
+        // Send Web Push Notification (Async)
         try {
-            const whatsappService = require('./whatsapp.service');
+            const notificationController = require('../controllers/notification.controller');
             let message = `Sayın ${data.customerName},\n${data.date} tarihinde saat ${data.hour} için randevunuz oluşturulmuştur.\n`;
             if (data.barberName) message += `Berber: ${data.barberName}\n`;
             message += `Bizi tercih ettiğiniz için teşekkür ederiz.`;
-            whatsappService.sendMessage(data.phone, message).catch(e => logger.error('WA Send fail', e));
-        } catch (waError) {}
+            notificationController.sendNotificationToPhone(data.phone, { title: 'Randevu Onayı', body: message }).catch(e => logger.error('Push Send fail', e));
+        } catch (pushError) {}
 
         return savedAppointment;
 

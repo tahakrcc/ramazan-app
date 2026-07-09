@@ -1,6 +1,5 @@
 const cron = require('node-cron');
 const Appointment = require('../models/appointment.model');
-const whatsappService = require('../services/whatsapp.service');
 const logger = require('../config/logger');
 
 const dateUtils = require('../utils/date');
@@ -36,17 +35,19 @@ cron.schedule('*/10 * * * *', async () => {
             const aptDateTime = new Date(`${apt.date}T${apt.hour}:00.000+03:00`);
             // aptDateTime is now a proper UTC Date object representing the Turkish slot.
 
+            const notificationController = require('../controllers/notification.controller');
+
             // 1. Check 60 Minute Window
             if (apt.reminderSent60 !== true) {
                 if (aptDateTime >= startWindow60 && aptDateTime <= endWindow60) {
                     const message = `Sayın ${apt.customerName},\nRandevunuza 1 saat kalmıştır. Sizi bekliyoruz.\n- By Ramazan`;
                     try {
-                        await whatsappService.sendMessage(apt.phone, message);
+                        await notificationController.sendNotificationToPhone(apt.phone, { title: 'Randevu Hatırlatması', body: message });
                         apt.reminderSent60 = true;
                         await apt.save();
-                        logger.info(`60-min Reminder sent to ${apt.phone} (apt: ${apt.date} ${apt.hour})`);
+                        logger.info(`60-min Push Reminder sent to ${apt.phone} (apt: ${apt.date} ${apt.hour})`);
                     } catch (err) {
-                        logger.error(`Failed to send 60-min reminder to ${apt.phone}: ${err.message}`);
+                        logger.error(`Failed to send 60-min push reminder to ${apt.phone}: ${err.message}`);
                     }
                 }
             }
@@ -56,12 +57,12 @@ cron.schedule('*/10 * * * *', async () => {
                 if (aptDateTime >= startWindow30 && aptDateTime <= endWindow30) {
                     const message = `Sayın ${apt.customerName},\nRandevunuza 30 dakika kalmıştır.\n- By Ramazan`;
                     try {
-                        await whatsappService.sendMessage(apt.phone, message);
+                        await notificationController.sendNotificationToPhone(apt.phone, { title: 'Randevu Hatırlatması', body: message });
                         apt.reminderSent30 = true;
                         await apt.save();
-                        logger.info(`30-min Reminder sent to ${apt.phone} (apt: ${apt.date} ${apt.hour})`);
+                        logger.info(`30-min Push Reminder sent to ${apt.phone} (apt: ${apt.date} ${apt.hour})`);
                     } catch (err) {
-                        logger.error(`Failed to send 30-min reminder to ${apt.phone}: ${err.message}`);
+                        logger.error(`Failed to send 30-min push reminder to ${apt.phone}: ${err.message}`);
                     }
                 }
             }

@@ -1,7 +1,6 @@
 const cron = require('node-cron');
 const Appointment = require('../models/appointment.model');
 const BotState = require('../models/botState.model');
-const whatsappService = require('../services/whatsapp.service');
 const logger = require('../config/logger');
 
 const dateUtils = require('../utils/date');
@@ -28,10 +27,11 @@ cron.schedule('*/30 * * * *', async () => {
             // If 2 hours passed since appointment (using Turkey local time)
             if (currentHour >= aptHour + 2) {
 
-                const message = `Merhaba ${apt.customerName}, bugün By Ramazan'ı tercih ettiğiniz için teşekkürler! ✂️\n\nHizmetimizden memnun kaldınız mı? Puanınızı ve görüşünüzü bu mesaja cevap olarak yazabilirsiniz.\n\nÖrnek: "5 Saç kesimi harikaydı"`;
+                const message = `Merhaba ${apt.customerName}, bugün By Ramazan'ı tercih ettiğiniz için teşekkürler! ✂️\n\nHizmetimizden memnun kaldınız mı? Puanınızı ve görüşünüzü sitemizden bize iletebilirsiniz.`;
 
                 try {
-                    await whatsappService.sendMessage(apt.phone, message);
+                    // await whatsappService.sendMessage(apt.phone, message);
+                    // Push notification based feedback could be implemented here
 
                     // Update Appointment
                     apt.feedbackRequested = true;
@@ -48,9 +48,9 @@ cron.schedule('*/30 * * * *', async () => {
                         { upsert: true, new: true }
                     );
 
-                    logger.info(`Feedback request sent to ${apt.phone} (apt: ${apt.hour}, current Turkey hour: ${currentHour})`);
+                    logger.info(`Feedback marked requested for ${apt.phone} (apt: ${apt.hour}, current Turkey hour: ${currentHour})`);
                 } catch (err) {
-                    logger.error(`Failed to send feedback req to ${apt.phone}: ${err.message}`);
+                    logger.error(`Failed to mark feedback req for ${apt.phone}: ${err.message}`);
                 }
             }
         }
