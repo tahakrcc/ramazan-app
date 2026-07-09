@@ -210,23 +210,7 @@ const BookingFlow = ({ onBack, services, barbers, settings }) => {
 
     
 
-    if (isSuccess) {
-        return (
-            <div className="min-h-screen bg-dark-950 flex flex-col items-center justify-center text-white p-6 relative overflow-hidden">
-                <GrainOverlay />
-                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="w-32 h-32 border-2 border-gold-500 rounded-full flex items-center justify-center mb-8 text-gold-500 text-6xl shadow-[0_0_50px_rgba(212,175,55,0.2)] z-10">
-                    ✓
-                </motion.div>
-                <h2 className="text-4xl md:text-6xl font-serif mb-4 text-center z-10">Teşekkürler</h2>
-                <p className="text-gray-400 mb-12 text-center max-w-md z-10 text-lg">
-                    {isDoubleBooking ? 'Randevularınız başarıyla oluşturuldu. Sizi bekliyoruz.' : 'Randevunuz başarıyla oluşturuldu. Sizi bekliyoruz.'}
-                </p>
-                <button onClick={() => onBack()} className="px-8 py-4 bg-gold-500 text-dark-950 font-bold uppercase tracking-widest rounded-sm hover:bg-white hover:shadow-[0_0_20px_rgba(212,175,55,0.5)] transition-all z-10">
-                    Yeni Randevu Al
-                </button>
-            </div>
-        );
-    }
+
 
     return (
         <div className="bg-dark-950 min-h-screen text-white font-sans selection:bg-gold-500 selection:text-dark-950 overflow-x-hidden cursor-none pt-24 pb-20 relative">
@@ -500,6 +484,38 @@ const BookingFlow = ({ onBack, services, barbers, settings }) => {
                     </form>
                 </AccordionSection>
             </div>
+
+            {/* SUCCESS MODAL */}
+            <AnimatePresence>
+                {isSuccess && (
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[100] flex items-center justify-center bg-dark-950/80 backdrop-blur-md px-4"
+                    >
+                        <motion.div 
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            className="bg-dark-900 border border-gold-500/20 p-8 md:p-10 rounded-xl flex flex-col items-center max-w-sm w-full shadow-2xl relative"
+                        >
+                            <div className="w-20 h-20 border-2 border-gold-500 rounded-full flex items-center justify-center mb-6 text-gold-500 text-4xl shadow-[0_0_30px_rgba(212,175,55,0.2)]">
+                                ✓
+                            </div>
+                            <h2 className="text-3xl font-serif mb-3 text-center text-white">Teşekkürler</h2>
+                            <p className="text-gray-400 mb-8 text-center text-sm leading-relaxed">
+                                {isDoubleBooking ? 'Randevularınız başarıyla oluşturuldu. Sizi bekliyoruz.' : 'Randevunuz başarıyla oluşturuldu. Sizi bekliyoruz.'}
+                            </p>
+                            <button 
+                                onClick={() => onBack()} 
+                                className="w-full py-4 bg-gold-500 text-dark-950 font-bold uppercase tracking-widest rounded-sm hover:bg-white hover:shadow-[0_0_20px_rgba(212,175,55,0.5)] transition-all"
+                            >
+                                KAPAT
+                            </button>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };
