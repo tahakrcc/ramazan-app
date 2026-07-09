@@ -86,7 +86,10 @@ const PWAPrompt = () => {
             setShowNotificationPrompt(false);
         } catch (error) {
             console.error("Push subscription failed:", error);
-            toast.error("Bildirimlere abone olunamadı.");
+            if (!sessionStorage.getItem('pushFailed')) {
+                toast.error("Bildirimlere abone olunamadı.");
+                sessionStorage.setItem('pushFailed', 'true');
+            }
         }
     };
 
