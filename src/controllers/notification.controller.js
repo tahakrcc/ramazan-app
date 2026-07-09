@@ -14,6 +14,8 @@ if (publicKey && privateKey) {
     console.warn('VAPID keys are missing. Push notifications are disabled.');
 }
 
+const { normalizePhoneTR } = require('../utils/phone');
+
 exports.subscribe = async (req, res, next) => {
     try {
         const { subscription, phone } = req.body;
@@ -22,9 +24,11 @@ exports.subscribe = async (req, res, next) => {
             return res.status(400).json({ error: 'Subscription and phone are required' });
         }
 
+        const normalizedPhone = normalizePhoneTR(phone);
+
         // Update or insert subscription for this phone
         await Subscription.findOneAndUpdate(
-            { phone },
+            { phone: normalizedPhone },
             { subscription },
             { upsert: true, new: true }
         );
