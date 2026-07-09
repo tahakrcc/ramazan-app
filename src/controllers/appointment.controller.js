@@ -98,14 +98,15 @@ const create = async (req, res, next) => {
         // 2. Normalize phone number to consistent format (905XXXXXXXXX)
         value.phone = normalizePhoneTR(value.phone);
 
-        // 3. OTP Verification — always verify for web requests
-        if (value.createdFrom === 'web') {
-            const verificationService = require('../services/verification.service');
-            const isVerified = await verificationService.isVerified(value.phone);
-            if (!isVerified) {
-                return res.status(403).json({ error: 'Lütfen telefon numaranızı doğrulayınız.' });
-            }
-        }
+        // 3. OTP Verification is disabled
+        // if (value.createdFrom === 'web') {
+        //     const verificationService = require('../services/verification.service');
+        //     const isVerified = await verificationService.isVerified(value.phone);
+        //     if (!isVerified) {
+        //         return res.status(403).json({ error: 'Lütfen telefon numaranızı doğrulayınız.' });
+        //     }
+        // }
+
 
         // 4. Create Appointment
         const appointment = await appointmentService.createAppointment({
