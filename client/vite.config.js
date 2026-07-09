@@ -13,8 +13,8 @@ export default defineConfig({
         name: 'By Ramazan',
         short_name: 'By Ramazan',
         description: 'Premium Erkek Kuaförü Randevu Sistemi',
-        theme_color: '#1a1a1a',
-        background_color: '#1a1a1a',
+        theme_color: '#0a0a0a',
+        background_color: '#0a0a0a',
         display: 'standalone',
         orientation: 'portrait',
         icons: [
