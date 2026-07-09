@@ -473,13 +473,55 @@ const BookingFlow = ({ onBack, services, barbers, settings }) => {
                             </div>
                         )}
 
-                        <div className="pt-8">
-                            <button
-                                type="submit"
-                                className="w-full py-4 md:py-6 bg-gold-500 text-dark-950 hover:bg-white hover:shadow-[0_0_30px_rgba(212,175,55,0.4)] transition-all rounded-sm uppercase tracking-[0.2em] font-bold text-sm"
-                            >
-                                Randevuyu Oluştur
-                            </button>
+                        <div className="pt-8 space-y-4">
+                            {(() => {
+                                const isPushSupported = 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window;
+                                const isGranted = isPushSupported ? Notification.permission === 'granted' : true;
+                                const isDenied = isPushSupported ? Notification.permission === 'denied' : false;
+
+                                const handleEnableNotifications = async () => {
+                                    if (!isPushSupported) return;
+                                    const perm = await Notification.requestPermission();
+                                    // Trigger re-render by doing a dummy state update or just relying on the fact that they clicked
+                                    // Actually, we need to track notification permission state to re-render.
+                                    setFormData({...formData}); // force re-render
+                                    if (perm === 'granted') {
+                                        window.dispatchEvent(new Event('trigger-push-subscription'));
+                                    }
+                                };
+
+                                if (isPushSupported && !isGranted) {
+                                    return (
+                                        <div className="p-4 rounded-sm border border-red-500/30 bg-red-500/5 text-center">
+                                            <p className="text-sm text-gray-300 mb-3">
+                                                Randevu alabilmek için bildirimlere izin vermeniz zorunludur. (Randevu hatırlatıcıları için)
+                                            </p>
+                                            {isDenied ? (
+                                                <p className="text-xs text-red-400 font-bold">
+                                                    Bildirimleri engellediniz. Lütfen tarayıcı ayarlarından bildirimlere izin verip sayfayı yenileyin.
+                                                </p>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleEnableNotifications}
+                                                    className="w-full py-4 bg-dark-800 border border-gold-500 text-gold-500 hover:bg-gold-500 hover:text-dark-950 transition-all rounded-sm uppercase tracking-widest font-bold text-sm shadow-[0_0_15px_rgba(212,175,55,0.2)]"
+                                                >
+                                                    BİLDİRİMLERE İZİN VER
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <button
+                                        type="submit"
+                                        className="w-full py-4 md:py-6 bg-gold-500 text-dark-950 hover:bg-white hover:shadow-[0_0_30px_rgba(212,175,55,0.4)] transition-all rounded-sm uppercase tracking-[0.2em] font-bold text-sm"
+                                    >
+                                        Randevuyu Oluştur
+                                    </button>
+                                );
+                            })()}
                         </div>
                     </form>
                 </AccordionSection>

@@ -146,6 +146,16 @@ const PWAPrompt = () => {
         }
     };
 
+    useEffect(() => {
+        const handleTrigger = () => {
+            if ('Notification' in window && Notification.permission === 'granted') {
+                subscribeToPush();
+            }
+        };
+        window.addEventListener('trigger-push-subscription', handleTrigger);
+        return () => window.removeEventListener('trigger-push-subscription', handleTrigger);
+    }, []);
+
     if (isStandalone && !showNotificationPrompt && Notification.permission !== 'granted') {
         return (
             <button 
