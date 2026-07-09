@@ -86,8 +86,16 @@ const PWAPrompt = () => {
             setShowNotificationPrompt(false);
         } catch (error) {
             console.error("Push subscription failed:", error);
+            try {
+                // Try to clear ghost subscription
+                const registration = await navigator.serviceWorker.ready;
+                const existing = await registration.pushManager.getSubscription();
+                if (existing) await existing.unsubscribe();
+            } catch (e) {
+                console.error("Failed to unsubscribe ghost", e);
+            }
             if (!sessionStorage.getItem('pushFailed')) {
-                toast.error("Bildirimlere abone olunamadı.");
+                toast.error(`Bildirim hatası: ${error.message || "Bilinmeyen hata"}`);
                 sessionStorage.setItem('pushFailed', 'true');
             }
         }
