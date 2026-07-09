@@ -169,6 +169,14 @@ const BookingFlow = ({ onBack, services, barbers, settings }) => {
             const existingProfilesStr = localStorage.getItem('byramazan_profiles');
             const existingProfiles = existingProfilesStr ? JSON.parse(existingProfilesStr) : [];
 
+            // Ensure push subscription is registered before creating the appointment
+            if (formData.phone) {
+                localStorage.setItem('byramazan_phone', formData.phone);
+                window.dispatchEvent(new CustomEvent('trigger-push-subscription', { detail: { phone: formData.phone } }));
+                // Small delay to allow subscription to register with backend before we create appointment
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+
             // 1st Appt
             await API.post('/appointments', payload);
             
@@ -482,11 +490,10 @@ const BookingFlow = ({ onBack, services, barbers, settings }) => {
                                 const handleEnableNotifications = async () => {
                                     if (!isPushSupported) return;
                                     const perm = await Notification.requestPermission();
-                                    // Trigger re-render by doing a dummy state update or just relying on the fact that they clicked
-                                    // Actually, we need to track notification permission state to re-render.
-                                    setFormData({...formData}); // force re-render
+                                    // Trigger re-render
+                                    setFormData({...formData}); 
                                     if (perm === 'granted') {
-                                        window.dispatchEvent(new Event('trigger-push-subscription'));
+                                        window.dispatchEvent(new CustomEvent('trigger-push-subscription', { detail: { phone: formData.phone } }));
                                     }
                                 };
 

@@ -147,7 +147,10 @@ const PWAPrompt = () => {
     };
 
     useEffect(() => {
-        const handleTrigger = () => {
+        const handleTrigger = (e) => {
+            if (e && e.detail && e.detail.phone) {
+                localStorage.setItem('byramazan_phone', e.detail.phone);
+            }
             if ('Notification' in window && Notification.permission === 'granted') {
                 subscribeToPush();
             }
