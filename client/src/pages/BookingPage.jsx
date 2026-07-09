@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import BookingFlow from '../components/BookingFlow';
 import API from '../utils/api';
 import { format, addDays } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { toast } from 'react-toastify';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useTransform, useMotionValue, useAnimationFrame } from 'framer-motion';
 import GrainOverlay from '../components/GrainOverlay';
 import CustomCursor from '../components/CustomCursor';
 
@@ -11,6 +12,7 @@ const CONFIG = {
     businessName: 'By Ramazan',
     tagline: 'GENTLEMEN\'S\nGROOMING',
     workingHours: { start: 8, end: 20 },
+    // services: removed hardcoded
     location: {
         address: 'Movenpick Hotel -1 Kat',
         city: 'Malatya',
@@ -19,525 +21,512 @@ const CONFIG = {
     whatsapp: '905306978233'
 };
 
-const AccordionSection = ({ title, step, activeStep, onOpen, isCompleted, children, summary }) => {
-    const isOpen = activeStep === step;
+const BookingPage = () => {
+    const [step, setStep] = useState(0); // 0: Landing, 1: Booking Flow
+
+    useEffect(() => {
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+        if (isStandalone) setStep(1);
+    }, []);
+    const [isLoading, setIsLoading] = useState(true);
+    const [services, setServices] = useState([]);
+    const [barbers, setBarbers] = useState([]);
+    const [feedbacks, setFeedbacks] = useState([]);
+    const [settings, setSettings] = useState({ bookingRangeDays: 14, closedWeekDays: [] }); // Dynamic settings
+
+    // Initial Load Animation & Fetch Services & Feedbacks & Settings
+    useEffect(() => {
+        const loadData = async () => {
+            try {
+                const [servicesRes, barbersRes, feedbacksRes, settingsRes] = await Promise.all([
+                    API.get('/appointments/services'),
+                    API.get('/appointments/barbers'),
+                    API.get('/feedbacks/approved'),
+                    API.get('/settings/public')
+                ]);
+                setServices(servicesRes.data);
+                setBarbers(barbersRes.data);
+                setFeedbacks(feedbacksRes.data);
+                setSettings(settingsRes.data);
+            } catch (error) {
+                console.error('Failed to load data', error);
+                // Fallback if API fails
+                setServices([
+                    { id: 'sac', name: 'Saç Kesimi', price: 500, duration: 45 },
+                    { id: 'sakal', name: 'Sakal Tıraşı', price: 300, duration: 30 },
+                    { id: 'sac_sakal', name: 'Komple Bakım', price: 600, duration: 75 }
+                ]);
+            } finally {
+                setTimeout(() => setIsLoading(false), 2000);
+            }
+        };
+        loadData();
+    }, []);
+
+    if (isLoading) return <LoadingScreen />;
+
     return (
-        <div className="border border-white/10 rounded-sm mb-4 bg-dark-900 overflow-hidden shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
-            <button
-                type="button"
-                onClick={() => onOpen(step)}
-                className="w-full flex items-center justify-between p-4 md:p-6 bg-dark-950 hover:bg-white/5 transition-colors"
-            >
-                <div className="flex items-center gap-4">
-                    <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center font-bold text-sm md:text-base transition-all duration-300 ${isCompleted || isOpen ? 'bg-gold-500 text-dark-950 shadow-[0_0_15px_rgba(212,175,55,0.4)]' : 'bg-dark-800 text-gray-500'}`}>
-                        {isCompleted && !isOpen ? '✓' : step}
-                    </div>
-                    <div className="text-left flex flex-col justify-center">
-                        <h3 className={`font-serif text-lg md:text-2xl leading-none ${isOpen || isCompleted ? 'text-white' : 'text-gray-500'}`}>{title}</h3>
-                        {!isOpen && isCompleted && summary && <p className="text-gold-500 text-xs mt-2 uppercase tracking-widest leading-none">{summary}</p>}
-                    </div>
-                </div>
-                <div className={`text-gray-500 transition-transform duration-300 ${isOpen ? 'rotate-180 text-gold-500' : ''}`}>
-                    ▼
-                </div>
-            </button>
+        <div className="bg-dark-950 min-h-screen text-white font-sans selection:bg-gold-500 selection:text-dark-950 overflow-x-hidden cursor-none">
+            <GrainOverlay />
+            <CustomCursor />
             <AnimatePresence>
-                {isOpen && (
-                    <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        className="border-t border-white/5"
-                    >
-                        <div className="p-4 md:p-6 bg-dark-950/50">
-                            {children}
-                        </div>
-                    </motion.div>
+                {step === 0 && (
+                    <>
+                        <WhatsAppButton />
+                        <InstagramButton />
+                    </>
+                )}
+            </AnimatePresence>
+            <Nav />
+            <AnimatePresence mode="wait">
+                {step === 0 ? (
+                    <LandingView key="landing" onStart={() => setStep(1)} services={services} feedbacks={feedbacks} />
+                ) : (
+                    <BookingFlow key="booking" onBack={() => setStep(0)} services={services} barbers={barbers} settings={settings} />
                 )}
             </AnimatePresence>
         </div>
     );
 };
 
-const BookingPage = () => {
-    const [isLoading, setIsLoading] = useState(true);
-    const [services, setServices] = useState([]);
-    const [barbers, setBarbers] = useState([]);
-    const [settings, setSettings] = useState({ bookingRangeDays: 14, closedWeekDays: [] });
-    
-    // Accordion State
-    const [activeAccordion, setActiveAccordion] = useState(1);
-    
-    // Booking State
-    const [isDoubleBooking, setIsDoubleBooking] = useState(false);
-    const [selection, setSelection] = useState({ service: null, barber: null, date: null, slots: [] });
-    const [availableSlots, setAvailableSlots] = useState([]);
-    const [formData, setFormData] = useState({ name: '', phone: '', secondName: '', secondPhone: '' });
-    const [savedProfiles, setSavedProfiles] = useState([]);
-    const [showSecondPerson, setShowSecondPerson] = useState(false);
-    const [isSuccess, setIsSuccess] = useState(false);
+// --- Sub Components ---
+
+const HeroSlideshow = () => {
+    const images = ['/hero1.jpg', '/hero2.jpg', '/hero3.jpg'];
+    const [currentIndex, setCurrentIndex] = useState(0);
 
     useEffect(() => {
-        const loadData = async () => {
-            try {
-                const [servicesRes, barbersRes, settingsRes] = await Promise.all([
-                    API.get('/appointments/services'),
-                    API.get('/appointments/barbers'),
-                    API.get('/settings/public')
-                ]);
-                setServices(servicesRes.data);
-                setBarbers(barbersRes.data);
-                setSettings(settingsRes.data);
-            } catch (error) {
-                console.error('Failed to load data', error);
-                toast.error('Sistem verileri yüklenemedi.');
-            } finally {
-                setTimeout(() => setIsLoading(false), 800);
-            }
-        };
-
-        loadData();
-
-        // Load Profiles
-        let profiles = [];
-        const saved = localStorage.getItem('byramazan_profiles');
-        if (saved) {
-            try {
-                profiles = JSON.parse(saved);
-            } catch (e) {
-                profiles = [];
-            }
-        }
-        setSavedProfiles(profiles);
-        if (profiles.length > 0) {
-            setFormData(prev => ({ ...prev, name: profiles[0].name, phone: profiles[0].phone }));
-        }
+        const interval = setInterval(() => {
+            setCurrentIndex((prev) => (prev + 1) % images.length);
+        }, 5000); // Change every 5 seconds
+        return () => clearInterval(interval);
     }, []);
 
-    // Fetch Slots when date/barber changes
-    useEffect(() => {
-        if (selection.date) {
-            const fetchSlots = async () => {
-                try {
-                    const barberQuery = selection.barber ? `&barberId=${selection.barber._id}` : '';
-                    const res = await API.get(`/appointments/available?date=${selection.date}${barberQuery}`);
-                    setAvailableSlots(res.data.availableSlots || []);
-                } catch (error) {
-                    toast.error('Saatler yüklenemedi');
-                }
-            };
-            fetchSlots();
-        }
-    }, [selection.date, selection.barber]);
-
-    // Cleanup slots when switching dates
-    useEffect(() => {
-        setSelection(prev => ({ ...prev, slots: [] }));
-    }, [selection.date]);
-
-    const handlePhoneChange = (val, field) => {
-        let cleaned = val.replace(/\D/g, '');
-        if (cleaned.startsWith('0')) cleaned = cleaned.substring(1);
-        cleaned = cleaned.substring(0, 10);
-        setFormData({ ...formData, [field]: cleaned });
-    };
-
-    const clearSavedData = () => {
-        setFormData(prev => ({ ...prev, name: '', phone: '' }));
-        toast.info('Yeni kişi bilgilerini girebilirsiniz.', { autoClose: 2000 });
-    };
-
-    const deleteProfile = (e, phoneToRemove) => {
-        e.stopPropagation();
-        const updated = savedProfiles.filter(p => p.phone !== phoneToRemove);
-        setSavedProfiles(updated);
-        localStorage.setItem('byramazan_profiles', JSON.stringify(updated));
-        if (formData.phone === phoneToRemove) {
-            setFormData(prev => ({ ...prev, name: '', phone: '' }));
-        }
-        toast.info('Kişi silindi.');
-    };
-
-    const submitBooking = async (e) => {
-        e.preventDefault();
-        
-        if (formData.phone.length !== 10) {
-            toast.error('Lütfen telefon numarasını eksiksiz 10 hane olarak giriniz (Başına 0 koymadan).');
-            return;
-        }
-        if (isDoubleBooking && formData.secondPhone && formData.secondPhone.length !== 10) {
-            toast.error('Lütfen 2. kişinin telefon numarasını eksiksiz 10 hane olarak giriniz.');
-            return;
-        }
-        if (isDoubleBooking && selection.slots.length !== 2) {
-            toast.error('Lütfen 2 adet saat seçiniz.');
-            return;
-        }
-
-        try {
-            const sortedSlots = [...selection.slots].sort();
-            const payload = {
-                customerName: formData.name,
-                phone: formData.phone,
-                date: selection.date,
-                hour: sortedSlots[0],
-                service: selection.service.id,
-                barberId: selection.barber?._id,
-                barberName: selection.barber?.name
-            };
-
-            const existingProfilesStr = localStorage.getItem('byramazan_profiles');
-            const existingProfiles = existingProfilesStr ? JSON.parse(existingProfilesStr) : [];
-
-            // 1st Appt
-            await API.post('/appointments', payload);
-            
-            // Save 1st Profile
-            const newProfile = { name: formData.name, phone: formData.phone };
-            if (!existingProfiles.some(p => p.phone === newProfile.phone)) {
-                existingProfiles.push(newProfile);
-                localStorage.setItem('byramazan_profiles', JSON.stringify(existingProfiles));
-                setSavedProfiles([...existingProfiles]);
-            }
-
-            // 2nd Appt
-            if (isDoubleBooking) {
-                await API.post('/appointments', {
-                    ...payload,
-                    customerName: formData.secondName || formData.name,
-                    phone: formData.secondPhone || formData.phone,
-                    hour: sortedSlots[1],
-                });
-
-                if (formData.secondName && formData.secondPhone) {
-                    const secondProfile = { name: formData.secondName, phone: formData.secondPhone };
-                    if (!existingProfiles.some(p => p.phone === secondProfile.phone)) {
-                        existingProfiles.push(secondProfile);
-                        localStorage.setItem('byramazan_profiles', JSON.stringify(existingProfiles));
-                        setSavedProfiles([...existingProfiles]);
-                    }
-                }
-            }
-
-            setIsSuccess(true);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        } catch (error) {
-            console.error(error);
-            const errorMsg = error.response?.data?.error || error.message || 'Hata oluştu. Seçilen saatler dolmuş olabilir.';
-            toast.error(errorMsg);
-        }
-    };
-
-    if (isLoading) {
-        return (
-            <div className="fixed inset-0 bg-dark-950 flex items-center justify-center z-50">
-                <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ duration: 1.5, repeat: Infinity }}>
-                    <div className="relative group">
-                        <div className="absolute inset-0 bg-gold-500 blur-3xl opacity-20"></div>
-                        <img src="/logo.png" alt="Logo" className="w-32 h-32 object-contain drop-shadow-2xl relative" />
-                    </div>
-                </motion.div>
-            </div>
-        );
-    }
-
-    if (isSuccess) {
-        return (
-            <div className="min-h-screen bg-dark-950 flex flex-col items-center justify-center text-white p-6 relative overflow-hidden">
-                <GrainOverlay />
-                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="w-32 h-32 border-2 border-gold-500 rounded-full flex items-center justify-center mb-8 text-gold-500 text-6xl shadow-[0_0_50px_rgba(212,175,55,0.2)] z-10">
-                    ✓
-                </motion.div>
-                <h2 className="text-4xl md:text-6xl font-serif mb-4 text-center z-10">Teşekkürler</h2>
-                <p className="text-gray-400 mb-12 text-center max-w-md z-10 text-lg">
-                    {isDoubleBooking ? 'Randevularınız başarıyla oluşturuldu. Sizi bekliyoruz.' : 'Randevunuz başarıyla oluşturuldu. Sizi bekliyoruz.'}
-                </p>
-                <button onClick={() => window.location.reload()} className="px-8 py-4 bg-gold-500 text-dark-950 font-bold uppercase tracking-widest rounded-sm hover:bg-white hover:shadow-[0_0_20px_rgba(212,175,55,0.5)] transition-all z-10">
-                    Yeni Randevu Al
-                </button>
-            </div>
-        );
-    }
-
     return (
-        <div className="bg-dark-950 min-h-screen text-white font-sans selection:bg-gold-500 selection:text-dark-950 overflow-x-hidden cursor-none pt-24 pb-20 relative">
-            <GrainOverlay />
-            <CustomCursor />
-            
-            {/* Simple Navbar */}
-            <nav className="fixed top-0 left-0 right-0 p-4 md:p-6 flex justify-center items-center z-40 bg-dark-950/90 backdrop-blur-md border-b border-white/5">
-                <div className="flex items-center gap-3">
-                    <img src="/logo.png" alt="Logo" className="w-10 h-10 object-contain" />
-                    <span className="font-serif text-lg tracking-widest text-gold-500">BY RAMAZAN</span>
-                </div>
-            </nav>
-
-            <div className="max-w-2xl mx-auto px-4 mt-8 relative z-10">
-                <div className="text-center mb-10">
-                    <h1 className="text-4xl md:text-5xl font-serif mb-4">Randevu Oluştur</h1>
-                    <p className="text-gray-400 text-sm tracking-widest uppercase">Size en uygun zamanı seçin.</p>
-                </div>
-
-                {/* ACCORDION 1: Hizmet Seçimi */}
-                <AccordionSection 
-                    title="Hizmet & Kişi Sayısı" 
-                    step={1} 
-                    activeStep={activeAccordion} 
-                    onOpen={setActiveAccordion}
-                    isCompleted={selection.service !== null}
-                    summary={selection.service ? `${isDoubleBooking ? '2 Kişi' : 'Tek Kişi'} • ${selection.service.name}` : ''}
-                >
-                    <div className="mb-8 p-4 bg-white/5 border border-white/10 rounded-sm">
-                        <p className="text-xs text-gray-400 mb-4 font-bold uppercase tracking-widest">Kişi Sayısı Seçin</p>
-                        <div className="flex gap-4">
-                            <button
-                                onClick={() => setIsDoubleBooking(false)}
-                                className={`flex-1 py-3 rounded-sm border transition-all flex items-center justify-center gap-2 ${!isDoubleBooking ? 'bg-gold-500 text-dark-950 border-gold-500 font-bold shadow-[0_0_10px_rgba(212,175,55,0.3)]' : 'border-white/10 text-gray-400 hover:text-white'}`}
-                            >
-                                <span>👤</span> Tek Kişi
-                            </button>
-                            <button
-                                onClick={() => setIsDoubleBooking(true)}
-                                className={`flex-1 py-3 rounded-sm border transition-all flex items-center justify-center gap-2 ${isDoubleBooking ? 'bg-gold-500 text-dark-950 border-gold-500 font-bold shadow-[0_0_10px_rgba(212,175,55,0.3)]' : 'border-white/10 text-gray-400 hover:text-white'}`}
-                            >
-                                <span>👥</span> İki Kişi
-                            </button>
-                        </div>
-                    </div>
-
-                    <p className="text-xs text-gray-400 mb-4 font-bold uppercase tracking-widest">Hizmet Seçin</p>
-                    <div className="grid gap-3">
-                        {services.map(s => (
-                            <button
-                                key={s.id}
-                                onClick={() => {
-                                    setSelection({ ...selection, service: s });
-                                    setTimeout(() => setActiveAccordion(2), 200);
-                                }}
-                                className={`text-left p-4 md:p-5 border transition-all group rounded-sm flex justify-between items-center ${selection.service?.id === s.id ? 'border-gold-500 bg-gold-500/10 shadow-[0_0_15px_rgba(212,175,55,0.2)]' : 'border-white/10 hover:border-gold-500/50 hover:bg-white/5'}`}
-                            >
-                                <span className={`font-serif text-lg md:text-xl ${selection.service?.id === s.id ? 'text-gold-500' : 'text-gray-200'}`}>{s.name}</span>
-                                <span className={`font-serif text-lg ${selection.service?.id === s.id ? 'text-gold-500' : 'text-gray-400'}`}>{s.price}₺</span>
-                            </button>
-                        ))}
-                    </div>
-                </AccordionSection>
-
-                {/* ACCORDION 2: Personel Seçimi */}
-                <AccordionSection 
-                    title="Personel Seçimi" 
-                    step={2} 
-                    activeStep={activeAccordion} 
-                    onOpen={(step) => { if (selection.service) setActiveAccordion(step); }}
-                    isCompleted={selection.barber !== null}
-                    summary={selection.barber?.name === 'Admin' ? 'Ramazan' : selection.barber?.name}
-                >
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {barbers.map(b => (
-                            <button
-                                key={b._id}
-                                onClick={() => {
-                                    setSelection({ ...selection, barber: b });
-                                    setTimeout(() => setActiveAccordion(3), 200);
-                                }}
-                                className={`flex items-center gap-4 p-4 border transition-all group rounded-sm text-left ${selection.barber?._id === b._id ? 'border-gold-500 bg-gold-500/10 shadow-[0_0_15px_rgba(212,175,55,0.2)]' : 'border-white/10 hover:border-gold-500/50 hover:bg-white/5'}`}
-                            >
-                                <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold bg-dark-950 border transition-colors ${selection.barber?._id === b._id ? 'border-gold-500' : 'border-white/10'}`} style={{ color: b.color || '#D4AF37' }}>
-                                    {b.name.charAt(0).toUpperCase()}
-                                </div>
-                                <div>
-                                    <h3 className={`font-serif text-lg ${selection.barber?._id === b._id ? 'text-gold-500' : 'text-white'}`}>{b.name === 'Admin' ? 'Ramazan' : b.name}</h3>
-                                    <p className="text-gray-400 text-[10px] uppercase tracking-widest">{b.role === 'ADMIN' ? 'Master Barber' : 'Barber'}</p>
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-                </AccordionSection>
-
-                {/* ACCORDION 3: Tarih & Saat */}
-                <AccordionSection 
-                    title="Tarih ve Saat" 
-                    step={3} 
-                    activeStep={activeAccordion} 
-                    onOpen={(step) => { if (selection.barber) setActiveAccordion(step); }}
-                    isCompleted={selection.date !== null && selection.slots.length > (isDoubleBooking ? 1 : 0)}
-                    summary={selection.date ? `${format(new Date(selection.date), 'dd MMM', {locale: tr})} • ${selection.slots.join(', ')}` : ''}
-                >
-                    {/* Date Scroller */}
-                    <div className="mb-8">
-                        <p className="text-xs text-gray-400 mb-3 font-bold uppercase tracking-widest">Gün Seçin</p>
-                        <div id="date-scroller" className="flex gap-2 md:gap-3 overflow-x-auto pb-4 hide-scrollbar px-1 scroll-smooth">
-                            {Array.from({ length: settings?.bookingRangeDays || 14 }).map((_, i) => {
-                                const now = new Date();
-                                const turkeyNow = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
-                                const dateObj = addDays(turkeyNow, i);
-                                const d = format(dateObj, 'yyyy-MM-dd');
-                                const isClosed = settings.closedWeekDays?.includes(dateObj.getDay());
-                                const isSelected = selection.date === d;
-                                return (
-                                    <button
-                                        key={d}
-                                        onClick={() => !isClosed && setSelection({ ...selection, date: d })}
-                                        disabled={isClosed}
-                                        className={`flex-shrink-0 w-16 h-20 md:w-20 md:h-24 border ${isClosed ? 'border-red-900/30 bg-red-950/20 text-gray-600 opacity-50' : isSelected ? 'border-gold-500 bg-gold-500 text-dark-950 shadow-[0_0_15px_rgba(212,175,55,0.3)]' : 'border-white/10 hover:border-gold-500 text-gray-400 hover:text-white'} transition-all flex flex-col items-center justify-center rounded-sm relative`}
-                                    >
-                                        <span className="text-[10px] uppercase tracking-widest opacity-80">{format(dateObj, 'EEE', { locale: tr })}</span>
-                                        <span className="text-xl md:text-2xl font-serif font-bold mt-1">{format(dateObj, 'dd')}</span>
-                                    </button>
-                                )
-                            })}
-                        </div>
-                    </div>
-
-                    {/* Time Slots */}
-                    {selection.date && (
-                        <div>
-                            <div className="flex justify-between items-center mb-4">
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Saat Seçin {isDoubleBooking && "(2 Adet)"}</p>
-                                {isDoubleBooking && selection.slots.length > 0 && (
-                                    <span className="text-[10px] text-gold-500 border border-gold-500/30 px-2 py-1 rounded-sm bg-gold-500/10">
-                                        {selection.slots.length}/2 Seçildi
-                                    </span>
-                                )}
-                            </div>
-                            
-                            <div className="grid grid-cols-3 gap-2 md:gap-3">
-                                {availableSlots.length > 0 ? availableSlots.map(t => {
-                                    const isSelected = selection.slots.includes(t);
-                                    const index = selection.slots.indexOf(t);
-                                    let bgClass = "border-white/10 bg-dark-950 text-gray-300 hover:border-gold-500 hover:text-white";
-                                    
-                                    if (isSelected) {
-                                        bgClass = index === 0 
-                                            ? "bg-gold-500 text-dark-950 border-gold-500 font-bold shadow-[0_0_15px_rgba(212,175,55,0.3)]" 
-                                            : "bg-gray-200 text-dark-950 border-gray-200 font-bold shadow-[0_0_15px_rgba(255,255,255,0.3)]";
-                                    }
-                                    
-                                    return (
-                                        <button
-                                            key={t}
-                                            onClick={() => {
-                                                let newSlots = [...selection.slots];
-                                                if (isDoubleBooking) {
-                                                    if (newSlots.length >= 2) newSlots = [t];
-                                                    else if (newSlots.includes(t)) newSlots = newSlots.filter(s => s !== t);
-                                                    else newSlots.push(t);
-                                                } else {
-                                                    newSlots = [t];
-                                                }
-                                                setSelection({ ...selection, slots: newSlots });
-                                                
-                                                if (!isDoubleBooking && newSlots.length === 1) setTimeout(() => setActiveAccordion(4), 400);
-                                                if (isDoubleBooking && newSlots.length === 2) setTimeout(() => setActiveAccordion(4), 400);
-                                            }}
-                                            className={`py-3 md:py-4 border transition-all rounded-sm text-sm relative ${bgClass}`}
-                                        >
-                                            {t}
-                                            {isSelected && isDoubleBooking && (
-                                                <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full text-[10px] flex items-center justify-center bg-dark-900 text-white font-bold border border-white/20">
-                                                    {index + 1}
-                                                </span>
-                                            )}
-                                        </button>
-                                    );
-                                }) : (
-                                    <div className="col-span-3 py-6 px-4 text-center border border-dashed border-white/10 rounded-sm bg-white/5">
-                                        <span className="text-2xl mb-2 block">📅</span>
-                                        <p className="text-gray-400 text-sm">Müsait saat bulunamadı.<br/>Lütfen başka bir gün veya personel seçin.</p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-                </AccordionSection>
-
-                {/* ACCORDION 4: Bilgileriniz & Onay */}
-                <AccordionSection 
-                    title="Kişisel Bilgiler & Onay" 
-                    step={4} 
-                    activeStep={activeAccordion} 
-                    onOpen={(step) => { if (selection.slots.length > (isDoubleBooking ? 1 : 0)) setActiveAccordion(step); }}
-                    isCompleted={false}
-                >
-                    <form onSubmit={submitBooking} className="space-y-6">
-                        
-                        {savedProfiles.length > 0 && (
-                            <div className="mb-6 p-4 md:p-5 bg-dark-950 border border-white/5 rounded-sm shadow-inner">
-                                <div className="flex justify-between items-center mb-4 border-b border-white/5 pb-2">
-                                    <span className="text-xs uppercase tracking-widest text-gold-500 font-bold">Kayıtlı Profiller</span>
-                                    <button type="button" onClick={clearSavedData} className="text-[10px] uppercase text-white hover:text-gold-500 transition-colors">+ Yeni Kişi Ekle</button>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                    {savedProfiles.map((profile, idx) => (
-                                        <div 
-                                            key={idx}
-                                            onClick={() => setFormData(prev => ({ ...prev, name: profile.name, phone: profile.phone }))}
-                                            className={`relative cursor-pointer px-4 py-2 rounded-sm border transition-all flex items-center gap-3 ${formData.phone === profile.phone ? 'bg-gold-500/20 border-gold-500 text-gold-500' : 'bg-white/5 border-white/10 text-gray-400 hover:border-gold-500/50'}`}
-                                        >
-                                            <div className="flex flex-col">
-                                                <span className="text-xs font-bold uppercase tracking-wider">{profile.name}</span>
-                                                <span className="text-[10px] tracking-widest opacity-80">{profile.phone}</span>
-                                            </div>
-                                            <button onClick={(e) => deleteProfile(e, profile.phone)} className="ml-2 w-5 h-5 flex items-center justify-center rounded-full bg-dark-900 text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors">✕</button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="space-y-4">
-                            <h4 className="text-sm font-serif text-white border-b border-white/10 pb-2">{isDoubleBooking ? '1. Kişi Bilgileri (Kendiniz)' : 'Sizin Bilgileriniz'}</h4>
-                            <div className="grid md:grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <label className="text-[10px] uppercase tracking-widest text-gold-500 ml-1">Ad Soyad</label>
-                                    <input type="text" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full bg-white/5 border-b-2 border-white/10 py-3 px-4 text-white focus:outline-none focus:border-gold-500 focus:bg-white/10 transition-all rounded-t-sm" placeholder="İsminizi giriniz" />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-[10px] uppercase tracking-widest text-gold-500 ml-1">Telefon</label>
-                                    <input type="tel" required value={formData.phone} onChange={e => handlePhoneChange(e.target.value, 'phone')} className="w-full bg-white/5 border-b-2 border-white/10 py-3 px-4 text-white focus:outline-none focus:border-gold-500 focus:bg-white/10 transition-all rounded-t-sm tracking-widest" placeholder="5XX XXX XX XX" />
-                                </div>
-                            </div>
-                        </div>
-
-                        {isDoubleBooking && (
-                            <div className="space-y-4 pt-4 mt-4 border-t border-white/5">
-                                <div className="flex justify-between items-center border-b border-white/10 pb-2">
-                                    <h4 className="text-sm font-serif text-white">2. Kişi Bilgileri</h4>
-                                    <button type="button" onClick={() => setShowSecondPerson(!showSecondPerson)} className="text-[10px] text-gray-400 hover:text-white uppercase transition-colors">{showSecondPerson ? 'Gizle' : 'Farklı Bir İsim Ekle (Opsiyonel)'}</button>
-                                </div>
-                                <AnimatePresence>
-                                    {showSecondPerson && (
-                                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                                            <p className="text-gray-500 text-[10px] mb-3">*Eğer bu alanı boş bırakırsanız, 2. randevu da sizin adınıza oluşturulur.</p>
-                                            <div className="grid md:grid-cols-2 gap-4">
-                                                <div className="space-y-1">
-                                                    <label className="text-[10px] uppercase tracking-widest text-gray-400 ml-1">Ad Soyad</label>
-                                                    <input type="text" value={formData.secondName} onChange={e => setFormData({ ...formData, secondName: e.target.value })} className="w-full bg-white/5 border-b-2 border-white/10 py-3 px-4 text-white focus:outline-none focus:border-white focus:bg-white/10 transition-all rounded-t-sm" placeholder="Arkadaşınızın ismi" />
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <label className="text-[10px] uppercase tracking-widest text-gray-400 ml-1">Telefon</label>
-                                                    <input type="tel" value={formData.secondPhone} onChange={e => handlePhoneChange(e.target.value, 'secondPhone')} className="w-full bg-white/5 border-b-2 border-white/10 py-3 px-4 text-white focus:outline-none focus:border-white focus:bg-white/10 transition-all rounded-t-sm tracking-widest" placeholder="5XX XXX XX XX" />
-                                                </div>
-                                            </div>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </div>
-                        )}
-
-                        <div className="pt-8">
-                            <button
-                                type="submit"
-                                className="w-full py-4 md:py-6 bg-gold-500 text-dark-950 hover:bg-white hover:shadow-[0_0_30px_rgba(212,175,55,0.4)] transition-all rounded-sm uppercase tracking-[0.2em] font-bold text-sm"
-                            >
-                                Randevuyu Oluştur
-                            </button>
-                        </div>
-                    </form>
-                </AccordionSection>
-            </div>
+        <div className="relative w-full h-full">
+            <AnimatePresence mode="wait">
+                <motion.img
+                    key={currentIndex}
+                    src={images[currentIndex]}
+                    alt="Hero Background"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 0.6 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 1.5, ease: 'easeInOut' }}
+                    className="absolute inset-0 w-full h-full object-cover"
+                />
+            </AnimatePresence>
         </div>
     );
 };
+
+
+
+const LoadingScreen = () => (
+    <div className="fixed inset-0 bg-dark-950 flex items-center justify-center z-50">
+        <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 1.5, repeat: Infinity, repeatType: "reverse" }}
+            className="flex flex-col items-center justify-center gap-6"
+        >
+            {/* Logo - Full Visibility */}
+            <div className="relative group">
+                <div className="absolute inset-0 bg-gold-500 blur-3xl opacity-20"></div>
+                <img src="/logo.png" alt="Logo" className="relative w-32 h-32 md:w-40 md:h-40 object-contain drop-shadow-2xl" />
+            </div>
+
+
+            {/* Foreground Text */}
+            <span className="relative z-10 text-gold-500 font-serif text-3xl md:text-5xl tracking-[0.3em] font-bold text-center drop-shadow-lg">
+                BY RAMAZAN
+            </span>
+        </motion.div>
+    </div>
+);
+
+const LandingView = ({ onStart, services, feedbacks }) => {
+    const { scrollYProgress } = useScroll();
+    const yHero = useTransform(scrollYProgress, [0, 1], [0, 300]);
+    const opacityHero = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
+
+    return (
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, y: -100 }}
+            transition={{ duration: 0.8 }}
+            className="relative"
+        >
+            {/* Hero Section */}
+            <section className="h-screen flex items-center justify-center relative overflow-hidden px-6">
+                {/* Background Slideshow */}
+                <div className="absolute inset-0 z-0">
+                    <HeroSlideshow />
+                    <div className="absolute inset-0 bg-gradient-to-t from-dark-950 via-dark-950/80 to-dark-950/40" />
+                </div>
+
+                <motion.div style={{ y: yHero, opacity: opacityHero }} className="z-10 text-center relative">
+                    <motion.div
+                        initial={{ y: 50, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.2, duration: 1 }}
+                        className="mb-6 overflow-hidden"
+                    >
+                        <p className="text-gold-500 tracking-[0.5em] text-xs md:text-sm uppercase font-bold drop-shadow-md">Est. 2014</p>
+                    </motion.div>
+
+                    <h1 className="text-[12vw] leading-[0.8] font-serif font-medium mb-8 drop-shadow-2xl">
+                        <span className="block overflow-hidden"><motion.span initial={{ y: "100%" }} animate={{ y: 0 }} transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }} className="block text-white">BY</motion.span></span>
+                        <span className="block overflow-hidden"><motion.span initial={{ y: "100%" }} animate={{ y: 0 }} transition={{ duration: 1, delay: 0.1, ease: [0.22, 1, 0.36, 1] }} className="block text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-gray-400">RAMAZAN</motion.span></span>
+                    </h1>
+
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.8 }}
+                        className="flex flex-col items-center gap-8"
+                    >
+                        <p className="max-w-md text-gray-200 text-sm md:text-base font-light leading-relaxed drop-shadow-md">
+                            Erkek bakımında modern sanat. Sadece randevuyla çalışıyoruz.
+                        </p>
+
+                        <button
+                            onClick={onStart}
+                            className="group relative px-10 py-5 bg-white/10 border border-white/20 hover:border-gold-500 hover:bg-gold-500 transition-all duration-500 rounded-sm overflow-hidden backdrop-blur-sm"
+                        >
+                            <span className="relative z-10 text-xs tracking-[0.25em] uppercase text-white group-hover:text-dark-950 font-bold transition-colors duration-300">Randevu Al</span>
+                        </button>
+                    </motion.div>
+                </motion.div>
+
+            </section>
+
+            {/* Editorial Services */}
+            <ServicesSection services={services} />
+
+            {/* Customer Feedbacks */}
+            {feedbacks && feedbacks.length > 0 && <FeedbackSection feedbacks={feedbacks} />}
+
+            <AboutSection />
+            <ContactSection />
+            <Footer />
+        </motion.div>
+    );
+};
+
+const ServicesSection = ({ services }) => (
+    <section id="hizmetler" className="py-32 px-6 md:px-20 border-t border-white/5 bg-dark-900 relative">
+        <div className="max-w-7xl mx-auto">
+            <div className="flex flex-col md:flex-row justify-between items-end mb-20 gap-8">
+                <div className="max-w-xl">
+                    <span className="text-gold-500 text-xs font-bold tracking-[0.3em] uppercase block mb-4">Hizmetlerimiz</span>
+                    <h2 className="text-5xl md:text-7xl font-serif text-white leading-tight">Hizmet<br />Koleksiyonu</h2>
+                </div>
+                <p className="text-gray-400 max-w-sm text-sm leading-relaxed">Kendinizi yeniden keşfedin. Her işlem, uzman stilistlerimiz tarafından kişiye özel tasarlanır.</p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-px bg-white/10 border border-white/10">
+                {services.map((service, index) => (
+                    <motion.div
+                        key={service.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ delay: index * 0.1 }}
+                        className="bg-dark-950 p-12 group hover:bg-dark-900 transition-colors duration-500 relative overflow-hidden"
+                    >
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10">
+                            <div>
+                                <h3 className="text-3xl font-serif mb-2 text-white group-hover:text-gold-500 transition-colors">{service.name}</h3>
+                                <p className="text-gray-300 text-sm tracking-widest uppercase">{service.duration}dk • Premium Bakım</p>
+                            </div>
+                            <div className="text-4xl font-serif text-gold-500 transition-colors">
+                                {service.price}₺
+                            </div>
+                        </div>
+                    </motion.div>
+                ))}
+            </div>
+        </div>
+    </section>
+);
+
+const FeedbackSection = ({ feedbacks }) => {
+    // Swipeable Slider Logic
+    const [[page, direction], setPage] = useState([0, 0]);
+    const [isDragging, setIsDragging] = useState(false);
+
+    // Provide infinite loop index
+    const feedbackIndex = Math.abs(page % feedbacks.length);
+    const feedback = feedbacks[feedbackIndex];
+
+    const paginate = (newDirection) => {
+        setPage([page + newDirection, newDirection]);
+    };
+
+    // Auto-play
+    useEffect(() => {
+        if (isDragging) return;
+        const timer = setInterval(() => {
+            paginate(1);
+        }, 5000);
+        return () => clearInterval(timer);
+    }, [page, isDragging]);
+
+    const variants = {
+        enter: (direction) => ({
+            x: direction > 0 ? 1000 : -1000,
+            opacity: 0
+        }),
+        center: {
+            zIndex: 1,
+            x: 0,
+            opacity: 1
+        },
+        exit: (direction) => ({
+            zIndex: 0,
+            x: direction < 0 ? 1000 : -1000,
+            opacity: 0
+        })
+    };
+
+    const swipeConfidenceThreshold = 10000;
+    const swipePower = (offset, velocity) => {
+        return Math.abs(offset) * velocity;
+    };
+
+    return (
+        <section className="py-24 bg-dark-900 border-t border-white/5 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-gold-500/20 to-transparent"></div>
+            <div className="max-w-4xl mx-auto px-6 text-center">
+                <h2 className="text-3xl md:text-4xl font-serif text-white mb-16">Müşteri Deneyimleri</h2>
+
+                <div className="relative h-64 md:h-48 flex items-center justify-center overflow-hidden">
+                    <AnimatePresence initial={false} custom={direction} mode="popLayout">
+                        <motion.div
+                            key={page}
+                            custom={direction}
+                            variants={variants}
+                            initial="enter"
+                            animate="center"
+                            exit="exit"
+                            transition={{
+                                x: { type: "spring", stiffness: 300, damping: 30 },
+                                opacity: { duration: 0.2 }
+                            }}
+                            drag="x"
+                            dragConstraints={{ left: 0, right: 0 }}
+                            dragElastic={1}
+                            onDragStart={() => setIsDragging(true)}
+                            onDragEnd={(e, { offset, velocity }) => {
+                                setIsDragging(false);
+                                const swipe = swipePower(offset.x, velocity.x);
+
+                                if (swipe < -swipeConfidenceThreshold) {
+                                    paginate(1);
+                                } else if (swipe > swipeConfidenceThreshold) {
+                                    paginate(-1);
+                                }
+                            }}
+                            className="absolute w-full cursor-grab active:cursor-grabbing"
+                        >
+                            <div className="flex flex-col items-center">
+                                <div className="text-gold-500 text-2xl mb-4">{'★'.repeat(feedback.rating)}</div>
+                                <p className="text-xl md:text-2xl text-gray-300 font-serif italic mb-6 select-none">"{feedback.comment}"</p>
+                                <p className="text-sm font-bold text-white uppercase tracking-widest">— {feedback.customerName}</p>
+                            </div>
+                        </motion.div>
+                    </AnimatePresence>
+                </div>
+
+                {/* Indicators */}
+                <div className="flex justify-center gap-2 mt-8 z-10 relative">
+                    {feedbacks.map((_, idx) => (
+                        <button
+                            key={idx}
+                            onClick={() => {
+                                const newDir = idx > feedbackIndex ? 1 : -1;
+                                setPage([page + (idx - feedbackIndex), newDir]);
+                            }}
+                            className={`w-2 h-2 rounded-full transition-all ${idx === feedbackIndex ? 'bg-gold-500 w-6' : 'bg-white/10'}`}
+                        />
+                    ))}
+                </div>
+            </div>
+        </section>
+    );
+};
+
+const AboutSection = () => (
+    <section id="hakkimizda" className="py-32 px-6">
+        <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-20 items-center">
+            <div className="relative aspect-[3/4] overflow-hidden group rounded-sm">
+                <img
+                    src="/about.jpg"
+                    alt="By Ramazan Berber"
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 filter grayscale group-hover:grayscale-0"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-dark-950/80 to-transparent opacity-60"></div>
+            </div>
+            <div>
+                <span className="text-gold-500 text-xs font-bold tracking-[0.3em] uppercase block mb-8">Manifesto</span>
+                <h2 className="text-5xl md:text-6xl font-serif leading-tight mb-8 text-white">Sadece Bir Tıraş Değil,<br />Bir Ritüel.</h2>
+                <p className="text-gray-300 text-lg leading-relaxed font-light mb-12">
+                    By Ramazan'da biz, berberliği bir sanat formu olarak görüyoruz.
+                    Her makas darbesi, her havlu sıcaklığı ve her sohbet,
+                    sizin en iyi versiyonunuza ulaşmanız için tasarlandı.
+                </p>
+                <div className="grid grid-cols-2 gap-8 border-t border-white/10 pt-8">
+                    <div>
+                        <div className="text-3xl font-serif text-white mb-2">20+</div>
+                        <div className="text-xs uppercase tracking-widest text-gray-400">Yıllık Tecrübe</div>
+                    </div>
+                    <div>
+                        <div className="text-3xl font-serif text-white mb-2">5k+</div>
+                        <div className="text-xs uppercase tracking-widest text-gray-400">Mutlu Müşteri</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+);
+
+const ContactSection = () => (
+    <section id="iletisim" className="py-32 border-t border-white/5 bg-dark-900 text-center">
+        <p className="text-gold-500 text-xs font-bold tracking-[0.3em] uppercase mb-8">İletişim</p>
+        <h2 className="text-5xl md:text-8xl font-serif mb-12 text-white hover:text-gold-500 transition-colors duration-700 cursor-pointer">
+            Bize Ulaşın
+        </h2>
+        <div className="flex flex-col md:flex-row justify-center gap-12 text-sm tracking-widest uppercase text-gray-400">
+            <a href={`https://wa.me/${CONFIG.whatsapp}`} className="hover:text-white transition-colors">WhatsApp: {CONFIG.whatsapp}</a>
+            <span className="hidden md:inline">•</span>
+            <a href={CONFIG.location.mapsLink} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">{CONFIG.location.address}, {CONFIG.location.city}</a>
+        </div>
+    </section>
+);
+
+const Footer = () => (
+    <footer className="py-12 border-t border-white/5 text-center text-xs text-gray-600 uppercase tracking-widest">
+        &copy; 2024 By Ramazan. All rights reserved.
+    </footer>
+);
+
+const Nav = () => {
+    const [canInstall, setCanInstall] = useState(false);
+    const [isIOS, setIsIOS] = useState(false);
+
+    useEffect(() => {
+        const checkIOS = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+        setIsIOS(checkIOS);
+
+        const checkInstall = () => {
+            if (window.deferredPrompt) {
+                setCanInstall(true);
+            }
+        };
+
+        if (window.deferredPrompt) {
+            setCanInstall(true);
+        } else if (checkIOS && !isStandalone) {
+            setCanInstall(true); // Always show for iOS if not installed to give manual instructions
+        }
+
+        window.addEventListener('deferredPromptReady', checkInstall);
+        return () => window.removeEventListener('deferredPromptReady', checkInstall);
+    }, []);
+
+    const handleTopInstall = async () => {
+        if (window.deferredPrompt) {
+            window.deferredPrompt.prompt();
+            const { outcome } = await window.deferredPrompt.userChoice;
+            if (outcome === 'accepted') {
+                window.deferredPrompt = null;
+                setCanInstall(false);
+            }
+        } else if (isIOS) {
+            toast.info('Safari menüsünden "Paylaş" ikonuna tıklayıp "Ana Ekrana Ekle"yi seçin.', { autoClose: 5000 });
+        }
+    };
+
+    return (
+        <nav className="fixed top-0 left-0 right-0 p-6 md:p-8 flex justify-between items-center z-40 bg-gradient-to-b from-dark-950/80 to-transparent backdrop-blur-sm md:bg-none md:backdrop-blur-none transition-all duration-300">
+            <div className="z-50 relative flex items-center gap-4">
+                <img src="/logo.png" alt="Logo" className="w-12 h-12 md:w-16 md:h-16 object-contain drop-shadow-lg" />
+                <span className="font-serif text-xl tracking-widest text-white mix-blend-difference">BY RAMAZAN</span>
+            </div>
+
+            {/* Desktop Nav */}
+            <div className="hidden md:flex items-center gap-8 text-xs uppercase tracking-widest text-white mix-blend-difference">
+                <a href="#hizmetler" className="hover:text-gold-500 transition-colors">Hizmetler</a>
+                <a href="#hakkimizda" className="hover:text-gold-500 transition-colors">Hakkımızda</a>
+                <a href="#iletisim" className="hover:text-gold-500 transition-colors">İletişim</a>
+                {canInstall && (
+                    <button 
+                        onClick={handleTopInstall}
+                        className="px-4 py-2 bg-gold-500 text-dark-950 font-bold hover:bg-white transition-colors rounded-sm"
+                    >
+                        Uygulamayı İndir
+                    </button>
+                )}
+            </div>
+
+            {/* Mobile Nav Actions */}
+            <div className="flex md:hidden items-center gap-4 z-50">
+                {canInstall && (
+                    <button 
+                        onClick={handleTopInstall}
+                        className="px-3 py-2 bg-white text-dark-950 text-[10px] font-bold uppercase tracking-widest rounded-sm"
+                    >
+                        Yükle
+                    </button>
+                )}
+                <button
+                    onClick={() => document.querySelector('button[class*="group relative px-10"]')?.click()}
+                    className="px-4 py-2 bg-gold-500 text-dark-950 text-[10px] font-bold uppercase tracking-widest rounded-sm"
+                >
+                    Randevu Al
+                </button>
+            </div>
+        </nav>
+    );
+};
+
+const WhatsAppButton = () => (
+    <motion.a
+        href="https://wa.me/905306978233?text=merhaba"
+        target="_blank"
+        rel="noopener noreferrer"
+        initial={{ opacity: 0, x: -50 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ delay: 1, duration: 0.5 }}
+        className="fixed bottom-8 left-8 z-50 group"
+    >
+        <div className="w-14 h-14 flex items-center justify-center rounded-full bg-white/5 border border-white/10 backdrop-blur-sm text-gray-300 group-hover:text-gold-500 group-hover:border-gold-500 group-hover:bg-gold-500/10 transition-all duration-300 shadow-lg">
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" className="transition-transform group-hover:scale-110">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+            </svg>
+        </div>
+    </motion.a>
+);
+
+const InstagramButton = () => (
+    <motion.a
+        href="https://www.instagram.com/by_ramazan1?igsh=MTBvNm12aW5yZDA2Mw=="
+        target="_blank"
+        rel="noopener noreferrer"
+        initial={{ opacity: 0, x: -50 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ delay: 1.2, duration: 0.5 }}
+        className="fixed bottom-28 left-8 z-50 group"
+    >
+        <div className="w-14 h-14 flex items-center justify-center rounded-full bg-white/5 border border-white/10 backdrop-blur-sm text-gray-300 group-hover:text-gold-500 group-hover:border-gold-500 group-hover:bg-gold-500/10 transition-all duration-300 shadow-lg">
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" className="transition-transform group-hover:scale-110">
+                <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.069-4.85.069-3.204 0-3.584-.012-4.849-.069-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
+            </svg>
+        </div>
+    </motion.a>
+);
 
 export default BookingPage;
